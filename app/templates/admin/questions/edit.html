@@ -1,0 +1,99 @@
+{% extends "base.html" %}
+{% block title %}Admin · Edit question {{ q.id }}{% endblock %}
+{% block content %}
+<h1>Edit question #{{ q.id }}</h1>
+<p>Exam: <strong>{{ exam.name if exam else q.exam_id }}</strong> ·
+   Status: <code>{{ q.status.value }}</code>
+   {% if q.retired_at %}<span class="badge badge-soon">RETIRED at {{ q.retired_at.isoformat() }}</span>{% endif %}
+</p>
+
+<section>
+  <h2>Text · type · topic · difficulty · status</h2>
+  <form method="post" action="/admin/questions/{{ q.id }}/edit">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <label>Question text
+      <textarea name="question_text" rows="4" maxlength="4000">{{ q.question_text }}</textarea>
+    </label>
+    <label>Type
+      <select name="question_type">
+        {% for v in ["single","multiple","true_false"] %}
+          <option value="{{ v }}" {% if q.question_type.value == v %}selected{% endif %}>{{ v }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>Difficulty
+      <select name="difficulty">
+        <option value="">—</option>
+        {% for v in ["easy","medium","hard"] %}
+          <option value="{{ v }}" {% if q.difficulty and q.difficulty.value == v %}selected{% endif %}>{{ v }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>Topic (0 to clear)
+      <select name="topic_id">
+        <option value="0">—</option>
+        {% for t in topics %}
+          <option value="{{ t.id }}" {% if q.topic_id == t.id %}selected{% endif %}>{{ t.name }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>Status
+      <select name="status">
+        {% for s in ["imported","needs_review","verified_high","verified_medium","verified_low","published","retired","flagged"] %}
+          <option value="{{ s }}" {% if q.status.value == s %}selected{% endif %}>{{ s }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <button class="btn" type="submit">Save</button>
+  </form>
+</section>
+
+<section>
+  <h2>Options + correct answer</h2>
+  <form method="post" action="/admin/questions/{{ q.id }}/options">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    {% set option_map = {} %}
+    {% for o in options %}{% set _ = option_map.update({o.label: o}) %}{% endfor %}
+    {% for label in ["A","B","C","D","E"] %}
+      <label>Option {{ label }}
+        <input name="option_{{ label.lower() }}" maxlength="1000"
+               value="{{ option_map[label].option_text if option_map.get(label) else '' }}">
+      </label>
+    {% endfor %}
+    {% set correct_labels = options | selectattr("is_correct") | map(attribute="label") | list %}
+    <label>Correct answer (comma-separated)
+      <input name="correct_answer" value="{{ correct_labels | join(',') }}">
+    </label>
+    <button class="btn" type="submit">Replace options</button>
+  </form>
+</section>
+
+<section>
+  <h2>Overall explanation</h2>
+  <form method="post" action="/admin/questions/{{ q.id }}/explanation">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <textarea name="text" rows="4" maxlength="4000">{{ explanation.overall_explanation if explanation else "" }}</textarea>
+    <button class="btn" type="submit">Save explanation</button>
+  </form>
+</section>
+
+<section>
+  <h2>Retire / restore</h2>
+  {% if q.retired_at %}
+    <form method="post" action="/admin/questions/{{ q.id }}/restore">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <button class="btn" type="submit">Restore</button>
+    </form>
+  {% else %}
+    <form method="post" action="/admin/questions/{{ q.id }}/retire"
+          onsubmit="return confirm('Retire this question? It will be hidden from new attempts.');">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <label>Reason
+        <input name="reason" required maxlength="500">
+      </label>
+      <button class="btn btn-danger" type="submit">Retire</button>
+    </form>
+  {% endif %}
+</section>
+
+{% endblock %}

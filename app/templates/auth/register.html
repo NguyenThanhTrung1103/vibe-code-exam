@@ -1,0 +1,24 @@
+{% extends "auth/_layout.html" %}
+{% block title %}Register — Exam Platform{% endblock %}
+{% block auth_title %}Create an account{% endblock %}
+{% block auth_form %}
+  <p class="note">
+    <strong>Internal beta only.</strong> Public self-registration will be
+    disabled before launch.
+  </p>
+  <form method="post" action="/auth/register" hx-post="/auth/register" hx-target="#auth-result" hx-swap="innerHTML">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+    <label>Email
+      <input type="email" name="email" autocomplete="email" required />
+    </label>
+    <label>Username
+      <input type="text" name="username" autocomplete="username" required minlength="3" maxlength="64" />
+    </label>
+    <label>Password (min 12 chars)
+      <input type="password" name="password" autocomplete="new-password" required minlength="12" />
+    </label>
+    <button type="submit" class="btn">Create account</button>
+  </form>
+  <div id="auth-result" aria-live="polite"></div>
+  <p><a href="/auth/login">Have an account? Sign in</a></p>
+{% endblock %}

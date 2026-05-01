@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% block title %}Exam Platform — practice for vendor certifications{% endblock %}
+{% block content %}
+
+<section class="hero">
+  <h1>Practice. Verify. Pass.</h1>
+  <p class="hero-tagline">
+    Real exam-style questions, grouped by vendor and product.
+  </p>
+
+  <form class="search-form"
+        hx-get="/search/exams"
+        hx-target="#search-results"
+        hx-trigger="submit, keyup changed delay:300ms from:input[name='q']">
+    <input type="search" name="q" placeholder="Search vendor or exam (e.g. NSE4)…" maxlength="128">
+    <button class="btn" type="submit">Search</button>
+  </form>
+  <div id="search-results" aria-live="polite"></div>
+</section>
+
+<section class="vendor-grid">
+  <h2>Vendors</h2>
+  {% if not providers %}
+    <p>No published exams yet — check back soon.</p>
+  {% else %}
+    <ul class="card-grid">
+      {% for p in providers %}
+        <li class="card">
+          <a href="/vendors/{{ p.slug }}">
+            {% if p.logo_url %}<img src="{{ p.logo_url }}" alt="{{ p.name }} logo">{% endif %}
+            <strong>{{ p.name }}</strong>
+          </a>
+        </li>
+      {% endfor %}
+    </ul>
+    <p><a href="/vendors">All vendors →</a></p>
+  {% endif %}
+</section>
+
+<section class="popular-exams">
+  <h2>Popular exams</h2>
+  {% if not popular_exams %}
+    <p>Nothing published yet.</p>
+  {% else %}
+    <ul>
+      {% for exam, course, provider in popular_exams %}
+        <li>
+          <a href="/exams/{{ provider.slug }}/{{ exam.slug }}">
+            {{ provider.name }} · {{ exam.code or exam.name }}
+          </a>
+          <small>— {{ course.name }}</small>
+        </li>
+      {% endfor %}
+    </ul>
+  {% endif %}
+</section>
+
+{% endblock %}

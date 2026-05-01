@@ -1,0 +1,40 @@
+[Unit]
+Description=Exam Platform — FastAPI web (Phase 11 MVP, loopback-only)
+After=network-online.target postgresql.service redis-server.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=exam-platform
+Group=exam-platform
+WorkingDirectory=/srv/exam-platform
+EnvironmentFile=/srv/exam-platform/.env
+# Phase 11 MVP — bind 127.0.0.1:8001 directly. No Nginx vhost installed
+# (a template is shipped in ops/nginx/exam-platform.conf for Phase 12+
+# public-exposure work, but installation is gated on a satisfied
+# readiness checklist).
+ExecStart=/srv/exam-platform/.venv/bin/uvicorn app.main:app \
+  --host 127.0.0.1 --port 8001 \
+  --workers 2 --loop uvloop --http httptools \
+  --log-level info --access-log
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=15
+KillSignal=SIGINT
+# systemd hardening — least privilege + isolation
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+ReadWritePaths=/srv/exam-platform/uploads /srv/exam-platform/logs
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictNamespaces=yes
+RestrictRealtime=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+SystemCallArchitectures=native
+
+[Install]
+WantedBy=multi-user.target

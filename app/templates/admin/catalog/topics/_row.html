@@ -1,0 +1,20 @@
+{% set topic, exam, course, provider = row %}
+<tr id="topic-{{ topic.id }}">
+  <td>{{ provider.name if provider else "?" }}</td>
+  <td>{{ course.name if course else "?" }}</td>
+  <td>{{ exam.name if exam else "?" }}</td>
+  <td>{{ topic.name }}</td>
+  <td><code>{{ topic.slug }}</code></td>
+  <td>{{ topic.weight if topic.weight is not none else "—" }}</td>
+  <td>
+    <button class="btn btn-danger"
+            type="button"
+            hx-post="/admin/topics/{{ topic.id }}/delete"
+            hx-include="#page-csrf"
+            hx-target="#topic-{{ topic.id }}"
+            hx-swap="outerHTML"
+            hx-confirm="Delete topic {{ topic.name }}?">
+      Delete
+    </button>
+  </td>
+</tr>

@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block title %}Admin · Providers{% endblock %}
+{% block content %}
+<h1>Providers</h1>
+
+<input type="hidden" name="csrf_token" id="page-csrf" value="{{ csrf_token }}">
+
+<section class="catalog-create">
+  <h2>Add provider</h2>
+  <form hx-post="/admin/providers"
+        hx-target="#provider-rows"
+        hx-swap="beforeend"
+        hx-on::after-request="if(event.detail.successful) this.reset()">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <label>Name <input name="name" required maxlength="128"></label>
+    <label>Slug <input name="slug" maxlength="64" placeholder="auto from name"></label>
+    <label>Description <textarea name="description" maxlength="4000"></textarea></label>
+    <label>Logo URL <input name="logo_url" type="url"></label>
+    <button class="btn" type="submit">Create</button>
+  </form>
+</section>
+
+<table class="catalog-table">
+  <thead>
+    <tr><th>Name</th><th>Slug</th><th>Description</th><th>Actions</th></tr>
+  </thead>
+  <tbody id="provider-rows">
+  {% for row in rows %}
+    {% include "admin/catalog/providers/_row.html" %}
+  {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

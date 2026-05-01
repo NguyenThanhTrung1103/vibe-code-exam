@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block title %}Admin · Import Excel{% endblock %}
+{% block content %}
+<h1>Import Excel</h1>
+<p>Upload an XLSX of questions for an existing exam. The import is staged
+in <code>import_items</code>; nothing is published automatically.</p>
+
+<form method="post" enctype="multipart/form-data" action="/admin/imports">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+  <label>Target exam
+    <select name="target_exam_id" required>
+      {% for exam, course, provider in exams %}
+        <option value="{{ exam.id }}">
+          {{ provider.name }} · {{ course.name }} · {{ exam.name }}
+        </option>
+      {% endfor %}
+    </select>
+  </label>
+  <label>Excel file (.xlsx, max 25 MB)
+    <input type="file" name="file" accept=".xlsx" required>
+  </label>
+  <label>Attestation (≥4 chars)
+    <textarea name="attestation" rows="2" required
+              placeholder="I attest I have rights to upload this content."></textarea>
+  </label>
+  <button class="btn" type="submit">Upload</button>
+</form>
+
+<h2>Recent imports</h2>
+<table class="catalog-table">
+  <thead><tr><th>ID</th><th>File</th><th>Status</th><th>Total</th><th>Failed</th><th></th></tr></thead>
+  <tbody>
+  {% for r in recent %}
+    <tr>
+      <td>{{ r.id }}</td>
+      <td>{{ r.file_name }}</td>
+      <td>{{ r.status.value }}</td>
+      <td>{{ r.total_questions or 0 }}</td>
+      <td>{{ r.failed_questions or 0 }}</td>
+      <td>
+        <a class="btn" href="/admin/imports/{{ r.id }}/preview">Open</a>
+      </td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

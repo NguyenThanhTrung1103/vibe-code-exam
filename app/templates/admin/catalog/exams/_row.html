@@ -1,0 +1,38 @@
+{% set exam, course, provider = row %}
+<tr id="exam-{{ exam.id }}">
+  <td>{{ provider.name if provider else "?" }}</td>
+  <td>{{ course.name if course else "?" }}</td>
+  <td>{{ exam.name }} {% if exam.code %}<small>({{ exam.code }})</small>{% endif %}</td>
+  <td><code>{{ exam.slug }}</code></td>
+  <td>
+    <span class="exam-status status-{{ exam.publish_status.value }}">
+      {{ exam.publish_status.value }}
+    </span>
+  </td>
+  <td>
+    {% if exam.publish_status.value == "published" %}
+      <button class="btn"
+              type="button"
+              hx-post="/admin/exams/{{ exam.id }}/unpublish"
+              hx-include="#page-csrf"
+              hx-target="#exam-{{ exam.id }}"
+              hx-swap="outerHTML">Unpublish</button>
+    {% else %}
+      <button class="btn"
+              type="button"
+              hx-post="/admin/exams/{{ exam.id }}/publish"
+              hx-include="#page-csrf"
+              hx-target="#exam-{{ exam.id }}"
+              hx-swap="outerHTML">Publish</button>
+    {% endif %}
+    <button class="btn btn-danger"
+            type="button"
+            hx-post="/admin/exams/{{ exam.id }}/delete"
+            hx-include="#page-csrf"
+            hx-target="#exam-{{ exam.id }}"
+            hx-swap="outerHTML"
+            hx-confirm="Soft-delete exam {{ exam.name }}?">
+      Delete
+    </button>
+  </td>
+</tr>

@@ -1,0 +1,18 @@
+{% set course, provider = row %}
+<tr id="course-{{ course.id }}">
+  <td>{{ provider.name if provider else "?" }}</td>
+  <td>{{ course.name }}</td>
+  <td><code>{{ course.slug }}</code></td>
+  <td>{{ course.level or "—" }}</td>
+  <td>
+    <button class="btn btn-danger"
+            type="button"
+            hx-post="/admin/courses/{{ course.id }}/delete"
+            hx-include="#page-csrf"
+            hx-target="#course-{{ course.id }}"
+            hx-swap="outerHTML"
+            hx-confirm="Delete course {{ course.name }}?">
+      Delete
+    </button>
+  </td>
+</tr>

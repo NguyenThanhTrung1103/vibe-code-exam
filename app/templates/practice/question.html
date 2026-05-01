@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+{% block title %}{{ view.attempt.mode.value | title }} · Q{{ view.answer.order_index }} / {{ view.total }}{% endblock %}
+{% block content %}
+{% set q = view.question %}
+{% set a = view.answer %}
+{% set selected = view.selected_labels %}
+
+<header class="attempt-header">
+  <h1>Q{{ a.order_index }} / {{ view.total }}</h1>
+  <p class="attempt-mode">
+    Mode: <code>{{ view.attempt.mode.value }}</code>
+    {% if view.attempt.mode.value == 'practice' %}
+      · <a href="?reveal={% if reveal %}0{% else %}1{% endif %}">{% if reveal %}Hide answer{% else %}Show answer{% endif %}</a>
+    {% endif %}
+  </p>
+  {% if is_exam_mode and view.time_remaining_seconds is not none %}
+    {% include "practice/_timer.html" %}
+  {% endif %}
+</header>
+
+<article class="question-card">
+  <p class="question-text">{{ q.question_text }}</p>
+
+  {% set correct_count = options|selectattr('is_correct')|list|length %}
+  {% if q.question_type.value == 'multiple' %}
+    <p class="select-n-hint"><strong>Select {{ correct_count }} answers</strong></p>
+  {% endif %}
+
+  <form id="answer-form"
+        hx-post="/attempts/{{ view.attempt.id }}/q/{{ a.order_index }}/answer"
+        hx-trigger="change delay:500ms"
+        hx-include="this"
+        hx-swap="none">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <ul class="option-list">
+      {% set selected_set = selected | list %}
+      {% for o in options %}
+        {% set is_sel = o.label in selected_set %}
+        <li class="option {% if reveal and o.is_correct %}option-correct{% elif reveal and is_sel and not o.is_correct %}option-wrong{% endif %}">
+          <label>
+            {% if q.question_type.value == 'multiple' %}
+              <input type="checkbox" name="selected_options" value="{{ o.label }}" {% if is_sel %}checked{% endif %}>
+            {% else %}
+              <input type="radio" name="selected_options" value="{{ o.label }}" {% if is_sel %}checked{% endif %}>
+            {% endif %}
+            <strong>{{ o.label }}.</strong> {{ o.option_text }}
+            {% if reveal and o.is_correct %}<small>✓ correct</small>{% endif %}
+            {% if reveal and o.explanation %}<small class="opt-explanation">{{ o.explanation }}</small>{% endif %}
+          </label>
+        </li>
+      {% endfor %}
+    </ul>
+  </form>
+
+  {% if reveal %}
+    {% if q.id %}
+      <section class="reveal-explanation">
+        <p class="reveal-tag">Practice mode reveal</p>
+      </section>
+    {% endif %}
+  {% endif %}
+
+  <form hx-post="/attempts/{{ view.attempt.id }}/q/{{ a.order_index }}/flag"
+        hx-target="#flag-button"
+        hx-swap="outerHTML"
+        style="display:inline">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    {% include "practice/_flag_button.html" with context %}
+  </form>
+</article>
+
+<nav class="attempt-nav">
+  {% if a.order_index > 1 %}
+    <a class="btn" href="/attempts/{{ view.attempt.id }}/q/{{ a.order_index - 1 }}{% if reveal %}?reveal=1{% endif %}">← Previous</a>
+  {% endif %}
+  {% if a.order_index < view.total %}
+    <a class="btn" href="/attempts/{{ view.attempt.id }}/q/{{ a.order_index + 1 }}{% if reveal %}?reveal=1{% endif %}">Next →</a>
+  {% else %}
+    <a class="btn" href="/attempts/{{ view.attempt.id }}/submit-confirm">Finish &amp; submit</a>
+  {% endif %}
+</nav>
+
+{% include "practice/_nav_grid.html" %}
+{% endblock %}

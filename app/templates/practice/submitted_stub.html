@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block title %}Attempt submitted{% endblock %}
+{% block content %}
+<h1>Attempt #{{ attempt.id }} submitted</h1>
+<p>Status: <code>{% if attempt.finished_at %}submitted{% else %}in progress{% endif %}</code>.</p>
+{% if attempt.finished_at %}
+  <p>Finished at: <time datetime="{{ attempt.finished_at.isoformat() }}">{{ attempt.finished_at.isoformat() }}</time></p>
+  {% if attempt.duration_seconds %}<p>Duration: {{ attempt.duration_seconds }}s</p>{% endif %}
+{% endif %}
+<p>Detailed scoring + review lands in Phase 08. For now this is the
+   end-of-attempt placeholder.</p>
+<p>
+  <a class="btn" href="/">Home</a>
+  <a class="btn" href="/vendors">Vendors</a>
+</p>
+{% endblock %}

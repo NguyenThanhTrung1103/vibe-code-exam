@@ -1,0 +1,16 @@
+<tr id="provider-{{ row.id }}">
+  <td>{{ row.name }}</td>
+  <td><code>{{ row.slug }}</code></td>
+  <td>{{ (row.description or "")[:80] }}</td>
+  <td>
+    <button class="btn btn-danger"
+            type="button"
+            hx-post="/admin/providers/{{ row.id }}/delete"
+            hx-include="#page-csrf"
+            hx-target="#provider-{{ row.id }}"
+            hx-swap="outerHTML"
+            hx-confirm="Delete provider {{ row.name }}? Only allowed if it has no courses.">
+      Delete
+    </button>
+  </td>
+</tr>

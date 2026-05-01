@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% block title %}Admin · New question{% endblock %}
+{% block content %}
+<h1>New question</h1>
+
+<form method="post" action="/admin/questions">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+  <label>Exam
+    <select name="exam_id" required>
+      {% for e in exams %}<option value="{{ e.id }}">{{ e.name }}</option>{% endfor %}
+    </select>
+  </label>
+  <label>Topic
+    <select name="topic_id">
+      <option value="">—</option>
+      {% for t in topics %}<option value="{{ t.id }}">{{ t.name }}</option>{% endfor %}
+    </select>
+  </label>
+  <label>Question type
+    <select name="question_type" required>
+      <option value="single">single</option>
+      <option value="multiple">multiple</option>
+      <option value="true_false">true_false</option>
+    </select>
+  </label>
+  <label>Difficulty
+    <select name="difficulty">
+      <option value="">—</option>
+      <option value="easy">easy</option>
+      <option value="medium">medium</option>
+      <option value="hard">hard</option>
+    </select>
+  </label>
+  <label>Question text
+    <textarea name="question_text" rows="4" required maxlength="4000"></textarea>
+  </label>
+  {% for label in ["A","B","C","D","E"] %}
+    <label>Option {{ label }}
+      <input name="option_{{ label.lower() }}" maxlength="1000">
+    </label>
+  {% endfor %}
+  <label>Correct answer (comma-separated labels, e.g. "B" or "A,C")
+    <input name="correct_answer" required>
+  </label>
+  <label>Overall explanation (optional)
+    <textarea name="overall_explanation" rows="3" maxlength="4000"></textarea>
+  </label>
+  <button class="btn" type="submit">Create</button>
+</form>
+{% endblock %}

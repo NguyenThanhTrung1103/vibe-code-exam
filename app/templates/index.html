@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block title %}Exam Platform — Phase 1 MVP{% endblock %}
+{% block content %}
+  <section x-data="{ pinged: false }">
+    <h1>Exam Platform</h1>
+    <p>Phase 1 scaffolding is up. Try the healthcheck:</p>
+    <button class="btn"
+            hx-get="/healthz"
+            hx-target="#health-result"
+            hx-swap="innerHTML"
+            @click="pinged = true">
+      Run /healthz
+    </button>
+    <pre id="health-result" x-show="pinged"></pre>
+  </section>
+{% endblock %}

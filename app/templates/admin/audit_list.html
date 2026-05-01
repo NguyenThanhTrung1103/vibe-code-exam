@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+{% block title %}Audit log — admin{% endblock %}
+{% block content %}
+  <section class="audit-list">
+    <h1>Audit log</h1>
+    <p>Total: {{ total }} • page {{ page }} (size {{ page_size }})</p>
+
+    <form method="get" action="/admin/audit" class="audit-filters">
+      <label>entity_type
+        <input type="text" name="entity_type" value="{{ entity_type }}" />
+      </label>
+      <label>actor_id
+        <input type="number" name="actor_id" value="{{ actor_id }}" min="1" />
+      </label>
+      <input type="hidden" name="page_size" value="{{ page_size }}" />
+      <button type="submit" class="btn">Filter</button>
+    </form>
+
+    {% if rows %}
+      <table>
+        <thead>
+          <tr>
+            <th>id</th>
+            <th>created_at</th>
+            <th>actor</th>
+            <th>action</th>
+            <th>entity</th>
+            <th>request_id</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for r in rows %}
+            <tr>
+              <td>{{ r.id }}</td>
+              <td>{{ r.created_at }}</td>
+              <td>{{ r.actor_type.value if r.actor_type else "-" }}{% if r.actor_id %}#{{ r.actor_id }}{% endif %}</td>
+              <td>{{ r.action }}</td>
+              <td>{{ r.entity_type }}{% if r.entity_id %}#{{ r.entity_id }}{% endif %}</td>
+              <td>{{ r.request_id or "-" }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    {% else %}
+      <p>No rows.</p>
+    {% endif %}
+
+    <nav class="audit-pager">
+      {% if has_prev %}<a href="?page={{ page - 1 }}&page_size={{ page_size }}{% if entity_type %}&entity_type={{ entity_type }}{% endif %}{% if actor_id %}&actor_id={{ actor_id }}{% endif %}">&larr; prev</a>{% endif %}
+      {% if has_next %}<a href="?page={{ page + 1 }}&page_size={{ page_size }}{% if entity_type %}&entity_type={{ entity_type }}{% endif %}{% if actor_id %}&actor_id={{ actor_id }}{% endif %}">next &rarr;</a>{% endif %}
+    </nav>
+  </section>
+{% endblock %}

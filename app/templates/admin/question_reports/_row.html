@@ -1,0 +1,27 @@
+<tr id="report-{{ report.id }}">
+  <td>{{ report.id }}</td>
+  <td>
+    <a href="/admin/questions/{{ q.id }}/edit">
+      {{ (q.question_text or "")[:60] }}{% if (q.question_text or "")|length > 60 %}…{% endif %}
+    </a>
+  </td>
+  <td>{{ report.reason.value }}</td>
+  <td><span class="exam-status status-{{ report.status.value }}">{{ report.status.value }}</span></td>
+  <td>{{ report.created_at.isoformat()[:19] if report.created_at else "—" }}</td>
+  <td>
+    {% if report.status.value == 'open' %}
+      <button class="btn"
+              type="button"
+              hx-post="/admin/question-reports/{{ report.id }}/resolve"
+              hx-include="#page-csrf"
+              hx-target="#report-{{ report.id }}"
+              hx-swap="outerHTML">Resolve</button>
+      <button class="btn btn-danger"
+              type="button"
+              hx-post="/admin/question-reports/{{ report.id }}/reject"
+              hx-include="#page-csrf"
+              hx-target="#report-{{ report.id }}"
+              hx-swap="outerHTML">Reject</button>
+    {% endif %}
+  </td>
+</tr>

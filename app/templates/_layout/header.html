@@ -1,0 +1,12 @@
+<header class="site-header">
+  <div class="container">
+    <a class="brand" href="/">Exam Platform</a>
+    <nav class="nav">
+      <a href="/">Home</a>
+      <a href="/vendors">Vendors</a>
+      {% if current_user and current_user.role.value == "admin" %}
+        <a href="/admin/providers">Admin</a>
+      {% endif %}
+    </nav>
+  </div>
+</header>

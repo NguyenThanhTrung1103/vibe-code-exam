@@ -1,0 +1,16 @@
+{% if not q %}
+  {# blank query — empty state #}
+{% elif not rows %}
+  <p>No published exams matched <em>{{ q }}</em>.</p>
+{% else %}
+  <ul class="search-results">
+    {% for exam, course, provider in rows %}
+      <li>
+        <a href="/exams/{{ provider.slug }}/{{ exam.slug }}">
+          {{ provider.name }} · {{ exam.code or exam.name }}
+        </a>
+        <small>{{ course.name }}</small>
+      </li>
+    {% endfor %}
+  </ul>
+{% endif %}

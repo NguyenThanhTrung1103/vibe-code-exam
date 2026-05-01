@@ -1,0 +1,23 @@
+# Phase 11 — logrotate config for exam-platform.
+#
+# Most app logs go through journald (systemd captures stdout). The only
+# file outputs are:
+#   * /var/log/exam-backup.log   — Phase 10 backup script
+#   * /var/log/exam-deploy.log   — Phase 11 deploy/rollback scripts
+#   * /var/log/exam-install.log  — Phase 11 install script
+#
+# Install: copy this file to /etc/logrotate.d/exam-platform.
+
+/var/log/exam-backup.log
+/var/log/exam-deploy.log
+/var/log/exam-install.log
+{
+    weekly
+    rotate 8
+    compress
+    delaycompress
+    missingok
+    notifempty
+    copytruncate
+    create 0640 root adm
+}

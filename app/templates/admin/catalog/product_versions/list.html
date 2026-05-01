@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block title %}Admin · Product versions{% endblock %}
+{% block content %}
+<h1>Product versions</h1>
+<p class="catalog-hint">
+  Product/version pins (used by the Phase 2 AI verifier to anchor evidence to a
+  specific vendor docs revision). Phase 04 ships admin CRUD only — no public surface.
+</p>
+
+<input type="hidden" name="csrf_token" id="page-csrf" value="{{ csrf_token }}">
+
+<section class="catalog-create">
+  <h2>Add product version</h2>
+  <form hx-post="/admin/product-versions"
+        hx-target="#pv-rows"
+        hx-swap="beforeend"
+        hx-on::after-request="if(event.detail.successful) this.reset()">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <label>Provider
+      <select name="provider_id" required>
+        {% for p in providers %}<option value="{{ p.id }}">{{ p.name }}</option>{% endfor %}
+      </select>
+    </label>
+    <label>Product name <input name="product_name" required maxlength="128"></label>
+    <label>Version <input name="product_version" required maxlength="64"></label>
+    <label>Documentation URL <input name="documentation_base_url" type="url"></label>
+    <label>Release date <input name="release_date" type="date"></label>
+    <button class="btn" type="submit">Create</button>
+  </form>
+</section>
+
+<table class="catalog-table">
+  <thead>
+    <tr><th>Provider</th><th>Product</th><th>Version</th><th>Docs URL</th><th>Released</th><th>Actions</th></tr>
+  </thead>
+  <tbody id="pv-rows">
+  {% for row in rows %}
+    {% include "admin/catalog/product_versions/_row.html" %}
+  {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

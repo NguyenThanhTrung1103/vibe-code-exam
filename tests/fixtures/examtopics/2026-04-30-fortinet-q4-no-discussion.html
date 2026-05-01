@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<!--
+  SYNTHETIC fixture — 2026-04-30 — Phase 13 parser regression
+  Scenario: no discussion link present (graceful NULL test).
+  Sanitized: no real content, no PII.
+-->
+<html lang="en"><head><meta charset="utf-8"><title>Fixture Q4</title></head>
+<body>
+<div class="question-body" data-id="EXT-Q-004">
+  <p class="question-stem">Sample question stem placeholder.</p>
+  <ul class="options">
+    <li data-label="A">Option A placeholder.</li>
+    <li data-label="B">Option B placeholder.</li>
+    <li data-label="C">Option C placeholder.</li>
+    <li data-label="D">Option D placeholder.</li>
+  </ul>
+  <p class="correct-answer">Correct Answer: <span class="answer">B</span></p>
+  <div class="voted-answers-tally" style="display:none">
+    {"voted_answers": [{"key":"B","count":3}]}
+  </div>
+  <!-- intentionally no discussion-link element to test graceful NULL -->
+</div>
+</body></html>

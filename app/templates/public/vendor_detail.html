@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block title %}{{ provider.name }} exams — Exam Platform{% endblock %}
+{% block content %}
+
+<header class="vendor-header">
+  {% if provider.logo_url %}<img src="{{ provider.logo_url }}" alt="{{ provider.name }} logo">{% endif %}
+  <h1>{{ provider.name }}</h1>
+  {% if provider.description %}<p>{{ provider.description }}</p>{% endif %}
+</header>
+
+{% if not courses %}
+  <p>No published exams for {{ provider.name }} yet.</p>
+{% else %}
+  {% for bucket in courses %}
+    <section class="course-block">
+      <h2>{{ bucket.course.name }}</h2>
+      {% if bucket.course.description %}<p>{{ bucket.course.description }}</p>{% endif %}
+      <ul>
+        {% for exam in bucket.exams %}
+          <li>
+            <a href="/exams/{{ provider.slug }}/{{ exam.slug }}">
+              {{ exam.code or "" }} {{ exam.name }}
+            </a>
+          </li>
+        {% endfor %}
+      </ul>
+    </section>
+  {% endfor %}
+{% endif %}
+
+{% endblock %}

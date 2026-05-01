@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<!--
+  SYNTHETIC fixture — 2026-04-30 — Phase 13 parser regression
+  Scenario: 6 options A-F to test dynamic vote labels (red-team #10).
+  Vote distribution must NOT be hardcoded to A-E only.
+  Sanitized: no real content, no PII.
+-->
+<html lang="en"><head><meta charset="utf-8"><title>Fixture Q5</title></head>
+<body>
+<div class="question-body" data-id="EXT-Q-005">
+  <p class="question-stem">Sample 6-option question stem placeholder.</p>
+  <ul class="options">
+    <li data-label="A">Option A placeholder.</li>
+    <li data-label="B">Option B placeholder.</li>
+    <li data-label="C">Option C placeholder.</li>
+    <li data-label="D">Option D placeholder.</li>
+    <li data-label="E">Option E placeholder.</li>
+    <li data-label="F">Option F placeholder.</li>
+  </ul>
+  <p class="correct-answer">Correct Answer: <span class="answer">F</span></p>
+  <div class="voted-answers-tally" style="display:none">
+    {"voted_answers": [{"key":"F","count":12},{"key":"A","count":5},{"key":"B","count":3}]}
+  </div>
+  <a class="discussion-link" href="/discussions/fortinet/view/sample-q-005">
+    Discussion (15 comments)
+  </a>
+  <span class="discussion-count" data-count="15">15 comments</span>
+</div>
+</body></html>

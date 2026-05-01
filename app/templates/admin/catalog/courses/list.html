@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% block title %}Admin · Courses{% endblock %}
+{% block content %}
+<h1>Courses</h1>
+
+<input type="hidden" name="csrf_token" id="page-csrf" value="{{ csrf_token }}">
+
+<section class="catalog-create">
+  <h2>Add course</h2>
+  <form hx-post="/admin/courses"
+        hx-target="#course-rows"
+        hx-swap="beforeend"
+        hx-on::after-request="if(event.detail.successful) this.reset()">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <label>Provider
+      <select name="provider_id" required>
+        {% for p in providers %}<option value="{{ p.id }}">{{ p.name }}</option>{% endfor %}
+      </select>
+    </label>
+    <label>Name <input name="name" required maxlength="255"></label>
+    <label>Slug <input name="slug" maxlength="128" placeholder="auto from name"></label>
+    <label>Level
+      <select name="level">
+        <option value="">—</option>
+        <option value="beginner">beginner</option>
+        <option value="associate">associate</option>
+        <option value="professional">professional</option>
+        <option value="expert">expert</option>
+      </select>
+    </label>
+    <label>Description <textarea name="description" maxlength="4000"></textarea></label>
+    <button class="btn" type="submit">Create</button>
+  </form>
+</section>
+
+<table class="catalog-table">
+  <thead>
+    <tr><th>Provider</th><th>Course</th><th>Slug</th><th>Level</th><th>Actions</th></tr>
+  </thead>
+  <tbody id="course-rows">
+  {% for row in rows %}
+    {% include "admin/catalog/courses/_row.html" %}
+  {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+{% block title %}{{ exam.name }} — {{ provider.name }}{% endblock %}
+{% block content %}
+
+<nav class="breadcrumb">
+  <a href="/vendors">Vendors</a> ›
+  <a href="/vendors/{{ provider.slug }}">{{ provider.name }}</a> ›
+  <span>{{ exam.name }}</span>
+</nav>
+
+<header class="exam-header">
+  <h1>{{ exam.name }}</h1>
+  {% if exam.code %}<p class="exam-code">Code: <code>{{ exam.code }}</code></p>{% endif %}
+  <p class="exam-course"><strong>{{ course.name }}</strong> · {{ provider.name }}</p>
+  {% if exam.description %}<p>{{ exam.description }}</p>{% endif %}
+</header>
+
+<section class="exam-meta">
+  <dl>
+    {% if exam.time_limit_seconds %}
+      <dt>Time limit</dt>
+      <dd>{{ (exam.time_limit_seconds // 60) }} min</dd>
+    {% endif %}
+    {% if exam.passing_score_percent is not none %}
+      <dt>Passing score</dt>
+      <dd>{{ exam.passing_score_percent }}%</dd>
+    {% endif %}
+    <dt>Question count (published)</dt>
+    <dd>{{ published_question_count }}</dd>
+    {% if exam.last_verified_at %}
+      <dt>Last verified</dt>
+      <dd>{{ exam.last_verified_at.isoformat() }}</dd>
+    {% endif %}
+  </dl>
+</section>
+
+{% if topics %}
+<section class="exam-topics">
+  <h2>Topics</h2>
+  <ul>
+    {% for t in topics %}
+      <li>{{ t.name }}{% if t.weight is not none %} <small>(weight {{ t.weight }})</small>{% endif %}</li>
+    {% endfor %}
+  </ul>
+</section>
+{% endif %}
+
+<section class="exam-cta">
+  {% if published_question_count == 0 %}
+    <div class="badge badge-soon" role="status">
+      Coming soon — No questions available yet.
+    </div>
+    <p>This exam is published but does not have any questions yet. Check back later.</p>
+  {% else %}
+    {% if current_user %}
+      <form method="post" action="/attempts/start" style="display:inline">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token if csrf_token is defined else '' }}">
+        <input type="hidden" name="exam_id" value="{{ exam.id }}">
+        <button class="btn" type="submit" name="mode" value="practice">Start Practice</button>
+        <button class="btn" type="submit" name="mode" value="exam">Start Exam</button>
+      </form>
+    {% else %}
+      <a class="btn" href="/auth/login?next=/exams/{{ provider.slug }}/{{ exam.slug }}">Log in to start an attempt</a>
+    {% endif %}
+  {% endif %}
+</section>
+
+{% endblock %}

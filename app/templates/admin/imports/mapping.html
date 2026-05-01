@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block title %}Admin · Import {{ imp.id }} · Mapping{% endblock %}
+{% block content %}
+<h1>Import #{{ imp.id }} — column mapping</h1>
+<p>File: <code>{{ imp.file_name }}</code> · sheet <code>{{ sheet }}</code></p>
+
+<form method="post" action="/admin/imports/{{ imp.id }}/mapping">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+  <table class="catalog-table">
+    <thead><tr><th>Excel header</th><th>Maps to canonical field</th></tr></thead>
+    <tbody>
+    {% for header in headers %}
+      <tr>
+        <td><code>{{ header or "(blank)" }}</code></td>
+        <td>
+          <select name="map__{{ header }}">
+            <option value="">—</option>
+            {% for opt in ["question_text","question_type","difficulty","topic","option_a","option_b","option_c","option_d","option_e","correct_answer","explanation","reference","tags"] %}
+              <option value="{{ opt }}" {% if suggested.get(header) == opt %}selected{% endif %}>{{ opt }}</option>
+            {% endfor %}
+          </select>
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  <p><strong>Required:</strong> question_text, option_a, option_b, correct_answer.</p>
+  <button class="btn" type="submit">Save mapping &amp; parse</button>
+</form>
+{% endblock %}

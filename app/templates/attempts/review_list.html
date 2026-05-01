@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block title %}Review · attempt {{ attempt.id }}{% endblock %}
+{% block content %}
+<h1>Review · attempt #{{ attempt.id }}</h1>
+<nav class="filter-chips">
+  {% for key in ["all","wrong","flagged"] %}
+    <a class="chip {% if filter == key %}chip-active{% endif %}"
+       href="/attempts/{{ attempt.id }}/review?filter={{ key }}">{{ key }}</a>
+  {% endfor %}
+</nav>
+
+<table class="catalog-table">
+  <thead>
+    <tr><th>#</th><th>Status</th><th>Question</th><th>Correct?</th><th></th></tr>
+  </thead>
+  <tbody>
+    {% for answer, q in rows %}
+      <tr>
+        <td>{{ answer.order_index }}</td>
+        <td>
+          {% if answer.is_correct %}<span class="badge badge-pass">✓</span>
+          {% elif answer.is_correct is false %}<span class="badge badge-fail">✗</span>
+          {% else %}<span class="badge">unscored</span>{% endif %}
+          {% if answer.flagged %}🚩{% endif %}
+        </td>
+        <td>{{ (q.question_text or "")[:80] }}{% if (q.question_text or "")|length > 80 %}…{% endif %}</td>
+        <td>{{ "yes" if answer.is_correct else "no" }}</td>
+        <td><a class="btn" href="/attempts/{{ attempt.id }}/review/q/{{ answer.order_index }}">Open</a></td>
+      </tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+<p><a href="/attempts/{{ attempt.id }}/result">← Back to result</a></p>
+{% endblock %}

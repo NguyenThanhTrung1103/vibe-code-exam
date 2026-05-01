@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+{% block title %}Submit attempt{% endblock %}
+{% block content %}
+<h1>Submit attempt #{{ attempt.id }}?</h1>
+<p>Once submitted you will not be able to change your answers. The result page will appear next.</p>
+
+<form method="post" action="/attempts/{{ attempt.id }}/submit">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+  <button class="btn" type="submit">Yes, submit</button>
+  <a class="btn" href="/attempts/{{ attempt.id }}/q/1">Cancel</a>
+</form>
+{% endblock %}

@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block title %}Admin · Import {{ imp.id }} · Preview{% endblock %}
+{% block content %}
+<h1>Import #{{ imp.id }} — preview</h1>
+<p>File: <code>{{ imp.file_name }}</code> · status: <code>{{ imp.status.value }}</code></p>
+
+<input type="hidden" name="csrf_token" id="page-csrf" value="{{ csrf_token }}">
+
+<nav class="filter-chips">
+  {% for key in ["all","ok","duplicates","errors","warnings","skipped","imported"] %}
+    <a class="chip {% if filter == key %}chip-active{% endif %}"
+       href="/admin/imports/{{ imp.id }}/preview?filter={{ key }}">
+      {{ key }}{% if counts.get(key, 0) %} ({{ counts.get(key, 0) }}){% endif %}
+    </a>
+  {% endfor %}
+</nav>
+
+<table class="catalog-table">
+  <thead><tr>
+    <th>Row</th><th>Status</th><th>Question</th><th>Correct</th><th>Reason</th><th></th>
+  </tr></thead>
+  <tbody id="item-rows">
+    {% for item in items %}
+      {% include "admin/imports/_row.html" %}
+    {% endfor %}
+  </tbody>
+</table>
+
+<form method="post" action="/admin/imports/{{ imp.id }}/confirm" style="margin-top:1.5rem">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+  <button class="btn" type="submit">Confirm import (idempotent)</button>
+</form>
+<p class="catalog-hint">Confirm imports rows currently in <strong>ok</strong> status that have no question yet.
+Re-running confirm produces zero new questions.</p>
+{% endblock %}

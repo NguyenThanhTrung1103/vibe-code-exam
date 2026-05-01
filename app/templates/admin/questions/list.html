@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+{% block title %}Admin · Questions{% endblock %}
+{% block content %}
+<h1>Questions</h1>
+
+<input type="hidden" name="csrf_token" id="page-csrf" value="{{ csrf_token }}">
+
+<form method="get" action="/admin/questions" class="catalog-create">
+  <label>Exam
+    <select name="exam_id">
+      <option value="">all</option>
+      {% for e in exams %}
+        <option value="{{ e.id }}" {% if filters.exam_id == e.id %}selected{% endif %}>{{ e.name }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  <label>Status
+    <select name="status">
+      <option value="">all</option>
+      {% for s in ["imported","needs_review","verified_high","verified_medium","verified_low","published","retired","flagged"] %}
+        <option value="{{ s }}" {% if filters.status == s %}selected{% endif %}>{{ s }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  <label>Difficulty
+    <select name="difficulty">
+      <option value="">all</option>
+      <option value="easy" {% if filters.difficulty == "easy" %}selected{% endif %}>easy</option>
+      <option value="medium" {% if filters.difficulty == "medium" %}selected{% endif %}>medium</option>
+      <option value="hard" {% if filters.difficulty == "hard" %}selected{% endif %}>hard</option>
+    </select>
+  </label>
+  <label>Search
+    <input name="q" value="{{ filters.q }}" placeholder="ILIKE %text%">
+  </label>
+  <button class="btn" type="submit">Filter</button>
+  <a class="btn" href="/admin/questions/new">+ New question</a>
+</form>
+
+<form method="post" action="/admin/questions/bulk-topic" hx-post="/admin/questions/bulk-topic" hx-target="#bulk-result" hx-swap="innerHTML">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+  <table class="catalog-table">
+    <thead>
+      <tr>
+        <th></th><th>ID</th><th>Status</th><th>Diff.</th><th>Type</th><th>Question</th><th>Exam</th><th></th>
+      </tr>
+    </thead>
+    <tbody>
+    {% for q, exam, provider in rows %}
+      <tr>
+        <td><input type="checkbox" name="question_id" value="{{ q.id }}"></td>
+        <td>{{ q.id }}</td>
+        <td><span class="exam-status status-{{ q.status.value }}">{{ q.status.value }}</span></td>
+        <td>{{ q.difficulty.value if q.difficulty else "—" }}</td>
+        <td>{{ q.question_type.value }}</td>
+        <td><a href="/admin/questions/{{ q.id }}/edit">{{ (q.question_text or "")[:80] }}{% if (q.question_text or "")|length > 80 %}…{% endif %}</a></td>
+        <td>{{ provider.name }} · {{ exam.name }}</td>
+        <td><a class="btn" href="/admin/questions/{{ q.id }}/edit">Edit</a></td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  <p>
+    Bulk-assign topic_id <input type="number" name="topic_id" min="0" placeholder="0 to clear">
+    <button class="btn" type="submit">Apply</button>
+  </p>
+  <div id="bulk-result"></div>
+</form>
+
+<p>
+  <a href="?{{ ('exam_id=' ~ filters.exam_id) if filters.exam_id else '' }}{% if filters.status %}&status={{ filters.status }}{% endif %}{% if filters.difficulty %}&difficulty={{ filters.difficulty }}{% endif %}{% if filters.q %}&q={{ filters.q }}{% endif %}&page={{ page + 1 }}">Next page →</a>
+</p>
+{% endblock %}

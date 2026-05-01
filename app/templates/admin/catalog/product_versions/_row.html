@@ -1,0 +1,23 @@
+{% set pv, provider = row %}
+<tr id="pv-{{ pv.id }}">
+  <td>{{ provider.name if provider else "?" }}</td>
+  <td>{{ pv.product_name }}</td>
+  <td>{{ pv.product_version }}</td>
+  <td>
+    {% if pv.documentation_base_url %}
+      <a href="{{ pv.documentation_base_url }}" rel="nofollow noopener" target="_blank">link</a>
+    {% else %}—{% endif %}
+  </td>
+  <td>{{ pv.release_date.isoformat() if pv.release_date else "—" }}</td>
+  <td>
+    <button class="btn btn-danger"
+            type="button"
+            hx-post="/admin/product-versions/{{ pv.id }}/delete"
+            hx-include="#page-csrf"
+            hx-target="#pv-{{ pv.id }}"
+            hx-swap="outerHTML"
+            hx-confirm="Delete {{ pv.product_name }} {{ pv.product_version }}?">
+      Delete
+    </button>
+  </td>
+</tr>

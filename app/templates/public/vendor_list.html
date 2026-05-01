@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block title %}Vendors — Exam Platform{% endblock %}
+{% block content %}
+
+<h1>Vendors</h1>
+{% if not providers %}
+  <p>No vendors with published exams yet.</p>
+{% else %}
+  <ul class="card-grid">
+    {% for p in providers %}
+      <li class="card">
+        <a href="/vendors/{{ p.slug }}">
+          {% if p.logo_url %}<img src="{{ p.logo_url }}" alt="{{ p.name }} logo">{% endif %}
+          <strong>{{ p.name }}</strong>
+          {% if p.description %}<p>{{ p.description[:120] }}</p>{% endif %}
+        </a>
+      </li>
+    {% endfor %}
+  </ul>
+{% endif %}
+
+{% endblock %}

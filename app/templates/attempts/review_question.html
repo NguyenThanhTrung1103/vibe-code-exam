@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+{% block title %}Review · Q{{ answer.order_index }} / {{ total }}{% endblock %}
+{% block content %}
+<nav class="breadcrumb">
+  <a href="/attempts/{{ attempt.id }}/result">Result</a> ›
+  <a href="/attempts/{{ attempt.id }}/review">Review</a> ›
+  <span>Q{{ answer.order_index }} / {{ total }}</span>
+</nav>
+
+<header class="review-header">
+  <h1>Q{{ answer.order_index }}</h1>
+  {% if answer.is_correct %}
+    <span class="badge badge-pass">Correct</span>
+  {% elif answer.is_correct is false %}
+    <span class="badge badge-fail">Wrong</span>
+  {% else %}
+    <span class="badge">Unscored</span>
+  {% endif %}
+  <span class="badge">Unverified (admin-supplied)</span>
+</header>
+
+<article class="review-card">
+  <p>{{ question.question_text }}</p>
+  <ul class="option-list">
+    {% for o in options %}
+      {% set is_sel = o.label in selected_set %}
+      {% set is_correct = o.label in correct_set %}
+      <li class="option
+                 {% if is_correct %}option-correct{% endif %}
+                 {% if is_sel and not is_correct %}option-wrong{% endif %}">
+        <strong>{{ o.label }}.</strong> {{ o.option_text }}
+        {% if is_correct %}✓{% endif %}
+        {% if is_sel %}<small>· you picked</small>{% endif %}
+        {% if o.explanation %}<small class="opt-explanation">— {{ o.explanation }}</small>{% endif %}
+      </li>
+    {% endfor %}
+  </ul>
+
+  <section class="overall-explanation">
+    <h3>Overall explanation</h3>
+    {% if explanation and explanation.overall_explanation %}
+      <p>{{ explanation.overall_explanation }}</p>
+    {% else %}
+      <p><em>No explanation provided yet.</em></p>
+    {% endif %}
+  </section>
+
+  <details class="report-form">
+    <summary>Report this question</summary>
+    <form method="post" action="/questions/{{ question.id }}/reports"
+          hx-post="/questions/{{ question.id }}/reports"
+          hx-target="this"
+          hx-swap="outerHTML">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token if csrf_token is defined else '' }}">
+      <label>Reason
+        <select name="reason" required>
+          <option value="wrong_answer">wrong answer</option>
+          <option value="ambiguous">ambiguous</option>
+          <option value="outdated">outdated</option>
+          <option value="typo">typo</option>
+          <option value="other">other</option>
+        </select>
+      </label>
+      <label>Comment (optional, ≤2000 chars)
+        <textarea name="comment" rows="3" maxlength="2000"></textarea>
+      </label>
+      <button class="btn" type="submit">Submit report</button>
+    </form>
+  </details>
+</article>
+
+<nav class="review-nav">
+  {% if answer.order_index > 1 %}
+    <a class="btn" href="/attempts/{{ attempt.id }}/review/q/{{ answer.order_index - 1 }}">← Prev</a>
+  {% endif %}
+  {% if answer.order_index < total %}
+    <a class="btn" href="/attempts/{{ attempt.id }}/review/q/{{ answer.order_index + 1 }}">Next →</a>
+  {% endif %}
+</nav>
+{% endblock %}

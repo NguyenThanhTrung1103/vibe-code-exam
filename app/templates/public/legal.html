@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% block title %}{{ title }} · Exam Platform{% endblock %}
+{% block content %}
+<article class="legal-page">
+  <h1>{{ title }}</h1>
+  <div class="legal-body">
+    {{ body_html | safe }}
+  </div>
+  <p class="legal-back">
+    <a href="/">Back to home</a>
+  </p>
+</article>
+{% endblock %}

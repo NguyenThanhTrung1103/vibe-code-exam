@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+{% block title %}Attempt {{ attempt.id }} — result{% endblock %}
+{% block content %}
+<h1>Result · attempt #{{ attempt.id }}</h1>
+
+<section class="result-summary">
+  <p class="result-score">
+    <strong>{{ "%.2f"|format(attempt.score_percent or 0) }}%</strong>
+    {% if attempt.passed is true %}<span class="badge badge-pass">PASS</span>
+    {% elif attempt.passed is false %}<span class="badge badge-fail">FAIL</span>
+    {% else %}<span class="badge">no passing score set</span>{% endif %}
+  </p>
+  <dl>
+    <dt>Total questions</dt><dd>{{ attempt.total_questions or 0 }}</dd>
+    <dt>Correct</dt><dd>{{ attempt.correct_count or 0 }}</dd>
+    <dt>Wrong</dt><dd>{{ attempt.wrong_count or 0 }}</dd>
+    {% if attempt.duration_seconds %}<dt>Duration</dt><dd>{{ attempt.duration_seconds }} s</dd>{% endif %}
+    {% if exam and exam.passing_score_percent is not none %}
+      <dt>Passing score</dt><dd>{{ exam.passing_score_percent }}%</dd>
+    {% endif %}
+  </dl>
+</section>
+
+<section class="topic-breakdown">
+  <h2>Topic breakdown</h2>
+  {% if not breakdown %}
+    <p>No topic data.</p>
+  {% else %}
+    <table class="catalog-table">
+      <thead><tr><th>Topic</th><th>Correct</th><th>Total</th><th>%</th></tr></thead>
+      <tbody>
+      {% for b in breakdown %}
+        <tr>
+          <td>{{ b.topic_name }}</td>
+          <td>{{ b.correct }}</td>
+          <td>{{ b.total }}</td>
+          <td>{{ "%.1f"|format(b.percent) }}%</td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  {% endif %}
+</section>
+
+{% if recommendations %}
+<section class="recommendations">
+  <h2>Suggested focus areas</h2>
+  <ul>
+    {% for r in recommendations %}
+      <li>
+        <strong>{{ r.topic_name }}</strong> — {{ r.correct }}/{{ r.total }}
+        ({{ r.score_gap_pp }} pp below overall).
+      </li>
+    {% endfor %}
+  </ul>
+</section>
+{% endif %}
+
+<nav class="result-nav">
+  <a class="btn" href="/attempts/{{ attempt.id }}/review">Review all</a>
+  <a class="btn" href="/attempts/{{ attempt.id }}/review?wrong_only=1">Review wrong only</a>
+  <a class="btn" href="/">Home</a>
+</nav>
+{% endblock %}

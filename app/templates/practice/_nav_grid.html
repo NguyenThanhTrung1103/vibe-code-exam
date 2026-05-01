@@ -1,0 +1,19 @@
+<aside class="nav-grid">
+  <h3>Jump to</h3>
+  <ul class="nav-grid-cells">
+    {% for cell in grid %}
+      {% set state = 'answered' if cell.selected_options else 'blank' %}
+      <li>
+        <a class="cell cell-{{ state }} {% if cell.flagged %}cell-flagged{% endif %} {% if cell.order_index == view.answer.order_index %}cell-current{% endif %}"
+           href="/attempts/{{ view.attempt.id }}/q/{{ cell.order_index }}{% if reveal %}?reveal=1{% endif %}">
+          {{ cell.order_index }}
+        </a>
+      </li>
+    {% endfor %}
+  </ul>
+  <p class="nav-grid-legend">
+    <span class="cell cell-blank">·</span> blank
+    <span class="cell cell-answered">·</span> answered
+    <span class="cell cell-flagged">·</span> flagged
+  </p>
+</aside>

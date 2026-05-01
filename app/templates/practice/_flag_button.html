@@ -1,0 +1,4 @@
+{% set _a = answer if answer is defined else a %}
+<button id="flag-button" type="submit" class="btn-flag {% if _a.flagged %}flagged{% endif %}">
+  {% if _a.flagged %}🚩 Unflag{% else %}🏳 Flag for review{% endif %}
+</button>

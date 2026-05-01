@@ -1,0 +1,28 @@
+<div id="exam-timer"
+     class="exam-timer"
+     x-data="{
+       remaining: {{ view.time_remaining_seconds }},
+       fmt() {
+         const m = Math.floor(this.remaining / 60);
+         const s = this.remaining % 60;
+         return String(m).padStart(2, '0') + ':' + String(s).padStart(2, '0');
+       }
+     }"
+     x-init="
+       const tick = setInterval(() => {
+         remaining = Math.max(0, remaining - 1);
+         if (remaining === 0) {
+           clearInterval(tick);
+           const f = document.createElement('form');
+           f.method = 'POST';
+           f.action = '/attempts/{{ view.attempt.id }}/submit';
+           const t = document.createElement('input');
+           t.type = 'hidden'; t.name = 'csrf_token'; t.value = '{{ csrf_token }}';
+           f.appendChild(t);
+           document.body.appendChild(f);
+           f.submit();
+         }
+       }, 1000)"
+     :class="{ 'timer-warn': remaining < 300, 'timer-crit': remaining < 60 }">
+  Time left: <span x-text="fmt()" aria-live="polite">{{ "%02d:%02d"|format((view.time_remaining_seconds // 60), (view.time_remaining_seconds % 60)) }}</span>
+</div>

@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block title %}Admin · Import {{ imp.id }} · Done{% endblock %}
+{% block content %}
+<h1>Import #{{ imp.id }} — confirmed</h1>
+<p>Status: <code>{{ imp.status.value }}</code></p>
+
+<dl>
+  <dt>Total rows</dt><dd>{{ imp.total_questions or 0 }}</dd>
+  <dt>Imported</dt><dd>{{ counts.get('imported', 0) }}</dd>
+  <dt>Errors</dt><dd>{{ counts.get('error', 0) }}</dd>
+  <dt>Duplicates</dt><dd>{{ counts.get('duplicate', 0) }}</dd>
+  <dt>Skipped</dt><dd>{{ counts.get('skipped', 0) }}</dd>
+  <dt>Warnings</dt><dd>{{ counts.get('warning', 0) }}</dd>
+</dl>
+
+<p>Imported questions are <strong>private/draft</strong> by default. Open the
+exam in <code>/admin/exams</code> to publish it manually after review in
+<code>/admin/questions</code>.</p>
+
+<a class="btn" href="/admin/imports/{{ imp.id }}/preview">Re-open preview</a>
+<a class="btn" href="/admin/imports">Back to imports</a>
+{% endblock %}

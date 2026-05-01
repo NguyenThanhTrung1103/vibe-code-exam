@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block title %}Admin · Question reports{% endblock %}
+{% block content %}
+<h1>Question reports</h1>
+
+<input type="hidden" name="csrf_token" id="page-csrf" value="{{ csrf_token }}">
+
+<nav class="filter-chips">
+  {% for key in ["open","resolved","rejected","all"] %}
+    <a class="chip {% if filter == key %}chip-active{% endif %}"
+       href="/admin/question-reports?status={{ key }}">{{ key }}</a>
+  {% endfor %}
+</nav>
+
+<table class="catalog-table">
+  <thead>
+    <tr><th>ID</th><th>Question</th><th>Reason</th><th>Status</th><th>Filed</th><th>Actions</th></tr>
+  </thead>
+  <tbody>
+  {% for report, q in rows %}
+    {% include "admin/question_reports/_row.html" %}
+  {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

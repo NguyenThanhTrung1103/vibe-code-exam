@@ -1,0 +1,10 @@
+[Unit]
+Description=Exam Platform — daily backup timer (02:30 UTC)
+
+[Timer]
+OnCalendar=*-*-* 02:30:00 UTC
+Persistent=true
+Unit=exam-pg-backup.service
+
+[Install]
+WantedBy=timers.target
