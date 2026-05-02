@@ -45,6 +45,11 @@ class Import(Base):
     file_name: Mapped[str] = mapped_column(String(255), nullable=False)
     file_path: Mapped[str | None] = mapped_column(String(1024), nullable=True)
     file_type: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    # Optional admin-supplied label; UI falls back to file_name when blank.
+    title: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    # Set by parser detector at upload time — `xlsx` / `examtopics_html` /
+    # `qblock_pdf` / `qblock_text` / NULL when detection is ambiguous.
+    detected_format: Mapped[str | None] = mapped_column(String(32), nullable=True)
     target_exam_id: Mapped[int | None] = mapped_column(
         BigInteger, ForeignKey("exams.id", ondelete="RESTRICT"), nullable=True
     )

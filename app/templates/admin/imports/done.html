@@ -1,22 +1,81 @@
-{% extends "base.html" %}
-{% block title %}Admin · Import {{ imp.id }} · Done{% endblock %}
-{% block content %}
-<h1>Import #{{ imp.id }} — confirmed</h1>
-<p>Status: <code>{{ imp.status.value }}</code></p>
+{% extends "admin/_layout.html" %}
+{% block title %}Admin · Import #{{ imp.id }} · Done{% endblock %}
+{% block admin_content %}
+  <h1 class="admin-title">Import completed</h1>
+  <p class="admin-subtitle">Your Excel import is finalized. Imported questions are <strong>private/draft</strong> by default.</p>
 
-<dl>
-  <dt>Total rows</dt><dd>{{ imp.total_questions or 0 }}</dd>
-  <dt>Imported</dt><dd>{{ counts.get('imported', 0) }}</dd>
-  <dt>Errors</dt><dd>{{ counts.get('error', 0) }}</dd>
-  <dt>Duplicates</dt><dd>{{ counts.get('duplicate', 0) }}</dd>
-  <dt>Skipped</dt><dd>{{ counts.get('skipped', 0) }}</dd>
-  <dt>Warnings</dt><dd>{{ counts.get('warning', 0) }}</dd>
-</dl>
+  <ol class="steps" aria-label="Import steps">
+    <li class="done"><span class="num">1</span> Upload</li>
+    <li class="done"><span class="num">2</span> Mapping</li>
+    <li class="done"><span class="num">3</span> Preview</li>
+    <li class="active"><span class="num">4</span> Done</li>
+  </ol>
 
-<p>Imported questions are <strong>private/draft</strong> by default. Open the
-exam in <code>/admin/exams</code> to publish it manually after review in
-<code>/admin/questions</code>.</p>
+  {% set total_items = (counts.values()|sum) %}
+  {% set imported = counts.get('imported', 0) %}
+  {% set errors = counts.get('error', 0) %}
 
-<a class="btn" href="/admin/imports/{{ imp.id }}/preview">Re-open preview</a>
-<a class="btn" href="/admin/imports">Back to imports</a>
+  {% if imported > 0 %}
+    <div class="alert alert-success" role="status">
+      <strong>Import #{{ imp.id }}{% if imp.title %} — {{ imp.title }}{% endif %} confirmed.</strong>
+      {{ imported }} question{{ '' if imported == 1 else 's' }} created
+      {% if community_sources_count %} · {{ community_sources_count }} community source{{ '' if community_sources_count == 1 else 's' }}{% endif %}.
+    </div>
+  {% elif total_items == 0 %}
+    <div class="alert alert-warning" role="alert">
+      <strong>Import completed, but no rows were staged.</strong>
+      The mapping step likely never ran, or the file had zero data rows.
+      Open <a href="/admin/imports/{{ imp.id }}/mapping">column mapping</a> to retry, or upload a fresh file.
+    </div>
+  {% else %}
+    <div class="alert alert-warning" role="alert">
+      <strong>Import completed, but no questions were imported.</strong>
+      {{ total_items }} row{{ '' if total_items == 1 else 's' }} staged but {{ imported }} created
+      {% if errors %}({{ errors }} error{{ '' if errors == 1 else 's' }}){% endif %}.
+      Please review the <a href="/admin/imports/{{ imp.id }}/mapping">mapping</a> and source file.
+    </div>
+  {% endif %}
+
+  <section class="card">
+    <header class="card-header">
+      <h2 class="card-title">Summary{% if imp.title %} — {{ imp.title }}{% endif %}</h2>
+      <span class="card-meta">
+        <span class="code-chip">{{ imp.file_name }}</span>
+        {% if target_exam %} · {{ target_exam.name }}{% endif %}
+        · status <span class="pill pill-{{ imp.status.value }}">{{ imp.status.value }}</span>
+      </span>
+    </header>
+
+    <div class="metric-grid">
+      <div class="metric"><div class="metric-label">Staged rows</div><div class="metric-value">{{ total_items }}</div></div>
+      <div class="metric metric-ok"><div class="metric-label">Imported</div><div class="metric-value">{{ imported }}</div></div>
+      <div class="metric metric-error"><div class="metric-label">Errors</div><div class="metric-value">{{ errors }}</div></div>
+      <div class="metric"><div class="metric-label">Duplicates</div><div class="metric-value">{{ counts.get('duplicate', 0) }}</div></div>
+      <div class="metric"><div class="metric-label">Skipped</div><div class="metric-value">{{ counts.get('skipped', 0) }}</div></div>
+      <div class="metric metric-warning"><div class="metric-label">Warnings</div><div class="metric-value">{{ counts.get('warning', 0) }}</div></div>
+      <div class="metric"><div class="metric-label">Community sources</div><div class="metric-value">{{ community_sources_count }}</div></div>
+    </div>
+
+    <p class="muted">Open the exam in <code class="code-chip">/admin/exams</code> to publish it manually after review in <code class="code-chip">/admin/questions</code>.</p>
+  </section>
+
+  <section class="card">
+    <header class="card-header">
+      <h2 class="card-title">Next steps</h2>
+    </header>
+    <div class="actions">
+      {% if imported > 0 %}
+        <a class="btn-primary" href="/admin/questions?source_import_id={{ imp.id }}">Review imported questions</a>
+      {% endif %}
+      {% if first_question_id %}
+        <a class="btn-ghost" href="/admin/questions/{{ first_question_id }}/edit">Open first imported question</a>
+        <a class="btn-ghost" href="/admin/questions/{{ first_question_id }}/community">Open Community tab</a>
+      {% endif %}
+      {% if target_exam %}
+        <a class="btn-ghost" href="/admin/questions?exam_id={{ target_exam.id }}">All questions for this exam</a>
+      {% endif %}
+      <a class="btn-ghost" href="/admin/imports/{{ imp.id }}/preview">Re-open preview</a>
+      <a class="btn-ghost" href="/admin/imports">Back to imports</a>
+    </div>
+  </section>
 {% endblock %}

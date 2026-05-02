@@ -1,47 +1,101 @@
-{% extends "base.html" %}
+{% extends "admin/_layout.html" %}
 {% block title %}Admin · Import Excel{% endblock %}
-{% block content %}
-<h1>Import Excel</h1>
-<p>Upload an XLSX of questions for an existing exam. The import is staged
-in <code>import_items</code>; nothing is published automatically.</p>
+{% block admin_content %}
+  <h1 class="admin-title">Admin Import Excel</h1>
+  <p class="admin-subtitle">Upload → Map columns → Preview rows → Confirm import.</p>
 
-<form method="post" enctype="multipart/form-data" action="/admin/imports">
-  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-  <label>Target exam
-    <select name="target_exam_id" required>
-      {% for exam, course, provider in exams %}
-        <option value="{{ exam.id }}">
-          {{ provider.name }} · {{ course.name }} · {{ exam.name }}
-        </option>
-      {% endfor %}
-    </select>
-  </label>
-  <label>Excel file (.xlsx, max 25 MB)
-    <input type="file" name="file" accept=".xlsx" required>
-  </label>
-  <label>Attestation (≥4 chars)
-    <textarea name="attestation" rows="2" required
-              placeholder="I attest I have rights to upload this content."></textarea>
-  </label>
-  <button class="btn" type="submit">Upload</button>
-</form>
+  <ol class="steps" aria-label="Import steps">
+    <li class="active"><span class="num">1</span> Upload</li>
+    <li><span class="num">2</span> Mapping</li>
+    <li><span class="num">3</span> Preview</li>
+    <li><span class="num">4</span> Done</li>
+  </ol>
 
-<h2>Recent imports</h2>
-<table class="catalog-table">
-  <thead><tr><th>ID</th><th>File</th><th>Status</th><th>Total</th><th>Failed</th><th></th></tr></thead>
-  <tbody>
-  {% for r in recent %}
-    <tr>
-      <td>{{ r.id }}</td>
-      <td>{{ r.file_name }}</td>
-      <td>{{ r.status.value }}</td>
-      <td>{{ r.total_questions or 0 }}</td>
-      <td>{{ r.failed_questions or 0 }}</td>
-      <td>
-        <a class="btn" href="/admin/imports/{{ r.id }}/preview">Open</a>
-      </td>
-    </tr>
-  {% endfor %}
-  </tbody>
-</table>
+  {% if error %}
+    <div class="alert alert-error" role="alert"><strong>Upload failed.</strong> {{ error }}</div>
+  {% endif %}
+
+  <section class="card">
+    <header class="card-header">
+      <h2 class="card-title">Upload a question dump</h2>
+      <span class="card-meta">XLSX · saved HTML · PDF · TXT · max 25 MB</span>
+    </header>
+
+    <form method="post" enctype="multipart/form-data" action="/admin/imports">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+
+      <div class="field">
+        <label class="field-label" for="target-exam">Target exam<span class="required-mark">*</span></label>
+        <select id="target-exam" name="target_exam_id" required>
+          {% for exam, course, provider in exams %}
+            <option value="{{ exam.id }}">{{ provider.name }} · {{ course.name }} · {{ exam.name }}</option>
+          {% endfor %}
+        </select>
+        <p class="field-help">Imported questions land in this exam as <strong>private/draft</strong>.</p>
+      </div>
+
+      <div class="field">
+        <label class="field-label" for="upload-title">Dump title</label>
+        <input id="upload-title" type="text" name="title" maxlength="255"
+               placeholder="Example: Gate-A1 synthetic seed 2026-05-02" />
+        <p class="field-help">Used only to identify this import in the admin screen. Leave blank to fall back to the filename.</p>
+      </div>
+
+      <div class="field">
+        <label class="field-label" for="upload-file">Question dump file<span class="required-mark">*</span></label>
+        <input id="upload-file" type="file" name="file" accept=".xlsx,.html,.htm,.pdf,.txt" required />
+        <p class="field-help">
+          Accepted:
+          <code class="code-chip">.xlsx</code>
+          <code class="code-chip">.html</code>
+          <code class="code-chip">.pdf</code>
+          <code class="code-chip">.txt</code>
+          · max 25 MB. XLSX uploads continue to the column-mapping step;
+          saved HTML / PDF / TXT dumps skip mapping and go straight to preview.
+        </p>
+      </div>
+
+      <div class="field">
+        <label class="field-label" for="upload-attestation">Upload attestation<span class="required-mark">*</span></label>
+        <textarea id="upload-attestation" name="attestation" rows="2" required
+                  placeholder="I confirm I have the right to upload this file."></textarea>
+        <p class="field-help">Required before upload. Minimum 4 characters.</p>
+      </div>
+
+      <div class="actions">
+        <button class="btn-primary" type="submit">Upload file</button>
+        <span class="muted">Next: column mapping.</span>
+      </div>
+    </form>
+  </section>
+
+  <section class="card">
+    <header class="card-header">
+      <h2 class="card-title">Recent imports</h2>
+      <span class="card-meta">Latest 20</span>
+    </header>
+    {% if recent %}
+    <table class="admin-table">
+      <thead><tr><th>ID</th><th>File / Title</th><th>Format</th><th>Status</th><th>Total</th><th>Failed</th><th></th></tr></thead>
+      <tbody>
+        {% for r in recent %}
+        <tr>
+          <td>#{{ r.id }}</td>
+          <td>
+            <strong>{{ r.title or r.file_name }}</strong>
+            {% if r.title %}<br><span class="muted code-chip">{{ r.file_name }}</span>{% endif %}
+          </td>
+          <td>{% if r.detected_format %}<span class="code-chip">{{ r.detected_format }}</span>{% else %}<span class="muted">—</span>{% endif %}</td>
+          <td><span class="pill pill-{{ r.status.value }}">{{ r.status.value }}</span></td>
+          <td>{{ r.total_questions or 0 }}</td>
+          <td>{{ r.failed_questions or 0 }}</td>
+          <td><a class="btn-ghost" href="/admin/imports/{{ r.id }}/preview">Open</a></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p class="muted">No prior imports yet.</p>
+    {% endif %}
+  </section>
 {% endblock %}

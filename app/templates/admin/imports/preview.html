@@ -1,35 +1,111 @@
-{% extends "base.html" %}
-{% block title %}Admin · Import {{ imp.id }} · Preview{% endblock %}
-{% block content %}
-<h1>Import #{{ imp.id }} — preview</h1>
-<p>File: <code>{{ imp.file_name }}</code> · status: <code>{{ imp.status.value }}</code></p>
+{% extends "admin/_layout.html" %}
+{% block title %}Admin · Import #{{ imp.id }} · Preview{% endblock %}
+{% block admin_content %}
+  {% set total = (counts.values()|sum) %}
+  {% set err_count = counts.get('error', 0) %}
+  {% set warn_count = counts.get('warning', 0) %}
+  {% set ok_count = counts.get('ok', 0) %}
+  {% set dup_count = counts.get('duplicate', 0) %}
+  {% set skip_count = counts.get('skipped', 0) %}
+  {% set imported_count = counts.get('imported', 0) %}
 
-<input type="hidden" name="csrf_token" id="page-csrf" value="{{ csrf_token }}">
+  <h1 class="admin-title">Preview rows</h1>
+  <p class="admin-subtitle">Review the staged rows. Confirm to commit.</p>
 
-<nav class="filter-chips">
-  {% for key in ["all","ok","duplicates","errors","warnings","skipped","imported"] %}
-    <a class="chip {% if filter == key %}chip-active{% endif %}"
-       href="/admin/imports/{{ imp.id }}/preview?filter={{ key }}">
-      {{ key }}{% if counts.get(key, 0) %} ({{ counts.get(key, 0) }}){% endif %}
-    </a>
-  {% endfor %}
-</nav>
+  <ol class="steps" aria-label="Import steps">
+    <li class="done"><span class="num">1</span> Upload</li>
+    <li class="done"><span class="num">2</span> Mapping</li>
+    <li class="active"><span class="num">3</span> Preview</li>
+    <li><span class="num">4</span> Done</li>
+  </ol>
 
-<table class="catalog-table">
-  <thead><tr>
-    <th>Row</th><th>Status</th><th>Question</th><th>Correct</th><th>Reason</th><th></th>
-  </tr></thead>
-  <tbody id="item-rows">
-    {% for item in items %}
-      {% include "admin/imports/_row.html" %}
-    {% endfor %}
-  </tbody>
-</table>
+  <section class="card">
+    <header class="card-header">
+      <h2 class="card-title">Import #{{ imp.id }}{% if imp.title %} — {{ imp.title }}{% endif %}</h2>
+      <span class="card-meta">
+        <span class="code-chip">{{ imp.file_name }}</span>
+        {% if target_exam %} · {{ target_exam.name }}{% endif %}
+        · status <span class="pill pill-{{ imp.status.value }}">{{ imp.status.value }}</span>
+      </span>
+    </header>
 
-<form method="post" action="/admin/imports/{{ imp.id }}/confirm" style="margin-top:1.5rem">
-  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-  <button class="btn" type="submit">Confirm import (idempotent)</button>
-</form>
-<p class="catalog-hint">Confirm imports rows currently in <strong>ok</strong> status that have no question yet.
-Re-running confirm produces zero new questions.</p>
+    <div class="metric-grid">
+      <div class="metric"><div class="metric-label">Total rows</div><div class="metric-value">{{ total }}</div></div>
+      <div class="metric metric-ok"><div class="metric-label">OK</div><div class="metric-value">{{ ok_count }}</div></div>
+      <div class="metric metric-warning"><div class="metric-label">Warnings</div><div class="metric-value">{{ warn_count }}</div></div>
+      <div class="metric metric-error"><div class="metric-label">Errors</div><div class="metric-value">{{ err_count }}</div></div>
+      <div class="metric"><div class="metric-label">Duplicates</div><div class="metric-value">{{ dup_count }}</div></div>
+      <div class="metric"><div class="metric-label">Skipped</div><div class="metric-value">{{ skip_count }}</div></div>
+      {% if imported_count %}<div class="metric"><div class="metric-label">Imported</div><div class="metric-value">{{ imported_count }}</div></div>{% endif %}
+    </div>
+
+    {% if total == 0 %}
+      <div class="alert alert-warning" role="alert">
+        <strong>No rows have been staged for this import.</strong>
+        Run the column mapping step first.
+        <a href="/admin/imports/{{ imp.id }}/mapping">Open column mapping</a>.
+      </div>
+    {% elif err_count > 0 %}
+      <div class="alert alert-error" role="alert">
+        <strong>Do not confirm while errors are present.</strong>
+        Resolve {{ err_count }} error{{ '' if err_count == 1 else 's' }} (filter <a href="?filter=errors">errors</a>) before continuing.
+      </div>
+    {% elif warn_count > 0 %}
+      <div class="alert alert-warning" role="alert">
+        <strong>{{ warn_count }} warning{{ '' if warn_count == 1 else 's' }}.</strong>
+        Review filter <a href="?filter=warnings">warnings</a> before confirming. Warnings do not block confirmation.
+      </div>
+    {% else %}
+      <div class="alert alert-success" role="status"><strong>Looks safe to confirm.</strong> No errors detected.</div>
+    {% endif %}
+
+    <input type="hidden" name="csrf_token" id="page-csrf" value="{{ csrf_token }}" />
+
+    <p class="section-label">Filter</p>
+    <nav class="actions" aria-label="Status filter">
+      {% for key in ["all","ok","duplicates","errors","warnings","skipped","imported"] %}
+        {% set c = counts.get(key, 0) if key != 'all' else total %}
+        <a class="btn-ghost{% if filter == key %} active{% endif %}"
+           href="/admin/imports/{{ imp.id }}/preview?filter={{ key }}"
+           {% if filter == key %}aria-current="page"{% endif %}>{{ key }} ({{ c }})</a>
+      {% endfor %}
+    </nav>
+
+    <p class="section-label">Rows {% if items|length %}(showing {{ items|length }}){% endif %}</p>
+    {% if items %}
+    <table class="admin-table">
+      <thead><tr><th>Row</th><th>Status</th><th>Question</th><th>Correct</th><th>Ext QID</th><th>Disc</th><th>Vote summary</th><th>Reason</th><th></th></tr></thead>
+      <tbody id="item-rows">
+        {% for item in items %}{% include "admin/imports/_row.html" %}{% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+      <p class="muted">No rows match the current filter.</p>
+    {% endif %}
+  </section>
+
+  <section class="card">
+    <header class="card-header">
+      <h2 class="card-title">Confirm import</h2>
+      <span class="card-meta">Idempotent — re-running confirm produces zero new questions.</span>
+    </header>
+
+    <form method="post" action="/admin/imports/{{ imp.id }}/confirm">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+      <div class="actions">
+        {% if total == 0 %}
+          <button class="btn-primary disabled" type="submit" disabled aria-disabled="true" title="Run mapping first">Confirm import</button>
+          <span class="muted">Disabled until rows are staged via mapping.</span>
+        {% elif err_count > 0 %}
+          <button class="btn-primary disabled" type="submit" disabled aria-disabled="true" title="Resolve errors first">Confirm import</button>
+          <span class="muted">Disabled until errors = 0.</span>
+        {% else %}
+          <button class="btn-primary" type="submit">Confirm import</button>
+          <span class="muted">Confirms rows in <code class="code-chip">ok</code> status only.</span>
+        {% endif %}
+        <span class="spacer"></span>
+        <a class="btn-ghost" href="/admin/imports">Back to imports</a>
+      </div>
+    </form>
+  </section>
 {% endblock %}

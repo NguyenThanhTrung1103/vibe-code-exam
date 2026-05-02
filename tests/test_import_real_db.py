@@ -610,3 +610,34 @@ def test_admin_imports_post_without_csrf_returns_403(client: TestClient, nonce: 
     )
     assert r.status_code == 403
     assert r.json()["detail"] == "invalid csrf"
+
+
+def test_confirm_blocks_on_zero_staged_rows(nonce: str) -> None:
+    """Regression for Import #135 ghost-confirm: refuse to confirm with 0 staged rows.
+
+    A user-visible failure mode prior to the guard was: admin uploaded a
+    file, skipped the mapping step, then hit confirm — the import header
+    was stamped finished with no rows actually imported. The guard at
+    `import_service.confirm_import` now raises `ImportStateError` so the
+    UI re-prompts the mapping step.
+    """
+    actor = _make_admin(nonce)
+    exam_id = _make_exam(actor, nonce)
+    with SessionLocal() as s:
+        actor = s.merge(actor)
+        imp = import_service.create_import(
+            s,
+            actor=actor,
+            request_id=None,
+            target_exam_id=exam_id,
+            file_name="empty.xlsx",
+            file_bytes=_good_xlsx(nonce, n=1),
+            attestation="I have rights",
+        )
+        s.commit()
+        # NOTE: deliberately skip save_mapping + parse_and_stage so import_items
+        # stays empty. confirm must refuse.
+        with pytest.raises(import_service.ImportStateError) as exc_info:
+            import_service.confirm_import(s, actor=actor, request_id=None, import_id=imp.id)
+        # Message must mention the staging step so the UI can re-prompt.
+        assert "staged" in str(exc_info.value).lower()

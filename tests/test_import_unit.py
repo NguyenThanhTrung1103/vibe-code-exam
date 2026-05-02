@@ -200,3 +200,59 @@ def test_excel_parser_caps_rows(tmp_path: Path) -> None:
 
     with pytest.raises(ValueError, match="too many data rows"):
         list(stream_rows(p, column_mapping=mapping, max_rows=2))
+
+
+# ---------------------------------------------------------------------------
+# Milestone 1 regressions — combined_options + Vietnamese alias map
+# ---------------------------------------------------------------------------
+
+
+def test_combined_options_split_into_option_slots() -> None:
+    """A `combined_options` cell is split into option_a..option_f by the normalizer.
+
+    Regression for the Vietnamese / dump-style XLSX path: a single sheet column
+    holding `A. EC2; B. S3; C. Lambda` must yield individual option_* slots
+    that the validator already understands. Individual `option_*` keys, when
+    present, must win over split values.
+    """
+    out = normalize_row(
+        {
+            "question_text": "Which is object storage?",
+            "combined_options": "A. EC2 ; B. S3 ; C. Lambda ; D. RDS",
+            "correct_answer": "B",
+        }
+    )
+    assert out["option_a"] == "EC2"
+    assert out["option_b"] == "S3"
+    assert out["option_c"] == "Lambda"
+    assert out["option_d"] == "RDS"
+    # combined_options must be popped — only individual slots survive.
+    assert "combined_options" not in out
+
+
+def test_combined_options_does_not_overwrite_explicit_option_slots() -> None:
+    """Explicit option_a wins over the split combined_options value."""
+    out = normalize_row(
+        {
+            "question_text": "Q?",
+            "option_a": "explicit-A",
+            "combined_options": "A. should-not-win ; B. beta",
+        }
+    )
+    assert out["option_a"] == "explicit-A"
+    assert out["option_b"] == "beta"
+
+
+def test_vietnamese_alias_map_routes_to_canonical_fields() -> None:
+    """The Vietnamese header alias map continues to map to canonical fields.
+
+    Smoke test that auto_map still recognises representative Vietnamese
+    headers — protects against accidental regressions when adding adapters.
+    """
+    headers = ["Nội dung câu hỏi", "Đáp án A", "Đáp án B", "Đáp án đúng"]
+    m = auto_map(headers)
+    assert m["Nội dung câu hỏi"] == "question_text"
+    # Đáp án A / B normalise to dapana / dapanb in the alias key after accent
+    # stripping — they may or may not exist as aliases. The contract we need
+    # to defend is: question_text + correct_answer keep working.
+    assert m["Đáp án đúng"] == "correct_answer"

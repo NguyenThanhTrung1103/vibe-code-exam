@@ -1,30 +1,113 @@
-{% extends "base.html" %}
-{% block title %}Admin · Import {{ imp.id }} · Mapping{% endblock %}
-{% block content %}
-<h1>Import #{{ imp.id }} — column mapping</h1>
-<p>File: <code>{{ imp.file_name }}</code> · sheet <code>{{ sheet }}</code></p>
+{% extends "admin/_layout.html" %}
+{% block title %}Admin · Import #{{ imp.id }} · Mapping{% endblock %}
+{% block admin_content %}
+  <h1 class="admin-title">Map columns</h1>
+  <p class="admin-subtitle">Confirm how each Excel header lines up with the canonical question fields.</p>
 
-<form method="post" action="/admin/imports/{{ imp.id }}/mapping">
-  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-  <table class="catalog-table">
-    <thead><tr><th>Excel header</th><th>Maps to canonical field</th></tr></thead>
-    <tbody>
-    {% for header in headers %}
-      <tr>
-        <td><code>{{ header or "(blank)" }}</code></td>
-        <td>
-          <select name="map__{{ header }}">
-            <option value="">—</option>
-            {% for opt in ["question_text","question_type","difficulty","topic","option_a","option_b","option_c","option_d","option_e","correct_answer","explanation","reference","tags"] %}
-              <option value="{{ opt }}" {% if suggested.get(header) == opt %}selected{% endif %}>{{ opt }}</option>
-            {% endfor %}
-          </select>
-        </td>
-      </tr>
+  <ol class="steps" aria-label="Import steps">
+    <li class="done"><span class="num">1</span> Upload</li>
+    <li class="active"><span class="num">2</span> Mapping</li>
+    <li><span class="num">3</span> Preview</li>
+    <li><span class="num">4</span> Done</li>
+  </ol>
+
+  {% if error %}<div class="alert alert-error" role="alert"><strong>Save failed.</strong> {{ error }}</div>{% endif %}
+
+  <section class="card">
+    <header class="card-header">
+      <h2 class="card-title">Import #{{ imp.id }}{% if imp.title %} — {{ imp.title }}{% endif %}</h2>
+      <span class="card-meta">
+        <span class="code-chip">{{ imp.file_name }}</span> · sheet <span class="code-chip">{{ sheet }}</span>
+        {% if target_exam %} · {{ target_exam.name }}{% endif %}
+      </span>
+    </header>
+
+    {% set missing_required = [] %}
+    {% set has_combined = 'combined_options' in mapped_fields %}
+    {% for f in required_fields %}
+      {% if f in ('option_a', 'option_b') and has_combined %}{# combined_options satisfies option_a + option_b after parse #}
+      {% elif f not in mapped_fields %}{% set _ = missing_required.append(f) %}{% endif %}
     {% endfor %}
-    </tbody>
-  </table>
-  <p><strong>Required:</strong> question_text, option_a, option_b, correct_answer.</p>
-  <button class="btn" type="submit">Save mapping &amp; parse</button>
-</form>
+    {% if missing_required %}
+      <div class="alert alert-warning" role="alert">
+        <strong>Required mappings are missing.</strong>
+        Please fix before continuing: {% for f in missing_required %}<code class="code-chip">{{ f }}</code>{% if not loop.last %} {% endif %}{% endfor %}
+        <br><span class="muted">Tip: dump-style sheets with one combined answer-list column can map that column to <code class="code-chip">combined_options</code> in place of separate Option A/B.</span>
+      </div>
+    {% elif has_combined %}
+      <div class="alert alert-success" role="status">
+        <strong>Combined options column detected.</strong>
+        It will be split on <code class="code-chip">;</code>, <code class="code-chip">；</code>, or newlines into Option A..F at parse time.
+      </div>
+    {% else %}
+      <div class="alert alert-success" role="status">
+        <strong>All required fields are mapped.</strong> You can save and continue to preview.
+      </div>
+    {% endif %}
+
+    <p class="section-label">Required fields</p>
+    <div class="mapping-status">
+      {% for f in required_fields %}
+        <div class="mapping-pair{% if f not in mapped_fields %} missing{% endif %}">
+          <div class="canonical">{{ f }}<span class="required-mark">*</span></div>
+          <div class="header">{% if f in mapped_fields %}{{ mapped_fields[f] }}{% else %}— not mapped —{% endif %}</div>
+        </div>
+      {% endfor %}
+    </div>
+
+    <p class="section-label">Community fields</p>
+    <div class="mapping-status">
+      {% for f in community_fields %}
+        <div class="mapping-pair">
+          <div class="canonical">{{ f }}</div>
+          <div class="header">{% if f in mapped_fields %}{{ mapped_fields[f] }}{% else %}—{% endif %}</div>
+        </div>
+      {% endfor %}
+    </div>
+
+    <p class="section-label">Optional metadata</p>
+    <div class="mapping-status">
+      {% for f in optional_fields %}
+        <div class="mapping-pair">
+          <div class="canonical">{{ f }}</div>
+          <div class="header">{% if f in mapped_fields %}{{ mapped_fields[f] }}{% else %}—{% endif %}</div>
+        </div>
+      {% endfor %}
+    </div>
+  </section>
+
+  <section class="card">
+    <header class="card-header">
+      <h2 class="card-title">Per-header mapping</h2>
+      <span class="card-meta">{{ headers|length }} Excel column{{ '' if headers|length == 1 else 's' }}</span>
+    </header>
+
+    <form method="post" action="/admin/imports/{{ imp.id }}/mapping">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+      <table class="admin-table">
+        <thead><tr><th>Excel header</th><th>Maps to canonical field</th></tr></thead>
+        <tbody>
+          {% for header in headers %}
+            <tr>
+              <td><span class="code-chip">{{ header or "(blank)" }}</span></td>
+              <td>
+                <select name="map__{{ header }}">
+                  <option value="">— ignore —</option>
+                  {% for opt in all_canonical_fields %}
+                    <option value="{{ opt }}" {% if suggested.get(header) == opt %}selected{% endif %}>{{ opt }}</option>
+                  {% endfor %}
+                </select>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+
+      <div class="actions">
+        <button class="btn-primary" type="submit">Save mapping &amp; continue</button>
+        <a class="btn-ghost" href="/admin/imports">Back to imports</a>
+        <span class="muted">Saving runs parse + stage and then opens the preview.</span>
+      </div>
+    </form>
+  </section>
 {% endblock %}

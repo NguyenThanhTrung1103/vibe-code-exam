@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import structlog
 from fastapi import APIRouter, Depends, Form, HTTPException, Request, Response, status
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.exc import IntegrityError
 
@@ -37,6 +37,30 @@ def _client_ip(request: Request) -> str:
     # the direct connection (loopback in dev). Trusting X-Forwarded-* on
     # untrusted ingress is a foot-gun.
     return request.client.host if request.client else "unknown"
+
+
+def _wants_html(request: Request) -> bool:
+    return "text/html" in request.headers.get("accept", "").lower()
+
+
+def _safe_next(raw: str | None) -> str | None:
+    """Allow only same-origin relative paths starting with '/'.
+
+    Rejects schemes, host-relative paths, and protocol-relative URLs to block
+    open-redirect abuse. Empty / missing returns None.
+    """
+    if not raw:
+        return None
+    if not raw.startswith("/") or raw.startswith("//"):
+        return None
+    return raw
+
+
+def _post_login_target(user_role: UserRole, raw_next: str | None) -> str:
+    nxt = _safe_next(raw_next)
+    if nxt is not None:
+        return nxt
+    return "/admin/imports" if user_role == UserRole.admin else "/"
 
 
 # ---------- GET pages (issue CSRF token) ----------
@@ -73,8 +97,11 @@ def _issue_csrf_for_template(
 
 @router.get("/login", response_class=HTMLResponse)
 def get_login(request: Request, current: OptionalUser) -> HTMLResponse:
+    next_url = _safe_next(request.query_params.get("next"))
     return _issue_csrf_for_template(
-        request, "auth/login.html", {"current_user": current, "error": None}
+        request,
+        "auth/login.html",
+        {"current_user": current, "error": None, "next": next_url or ""},
     )
 
 
@@ -97,15 +124,27 @@ def post_login(
     identifier: str = Form(...),
     password: str = Form(...),
     csrf_token: str = Form(""),
-) -> JSONResponse:
+    next: str = Form(""),  # noqa: A002 — form field name, mirrors HTML <input name="next">
+) -> Response:
     if not verify_csrf(request, csrf_token):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="invalid csrf")
 
+    is_browser = _wants_html(request)
     request_id = request.headers.get(REQUEST_ID_HEADER)
     ip = _client_ip(request)
     rl = check_login_rate_limit(redis, ip=ip, identifier=identifier)
     if not rl.allowed:
         log.warning("login_rate_limited", ip=ip, reason=rl.reason)
+        if is_browser:
+            return _issue_csrf_for_template(
+                request,
+                "auth/login.html",
+                {
+                    "current_user": None,
+                    "error": "Too many attempts. Try again later.",
+                    "next": _safe_next(next) or "",
+                },
+            )
         return JSONResponse(
             {"detail": "too many attempts, try again later"},
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
@@ -132,16 +171,22 @@ def post_login(
             request_id=request_id,
         )
         session.commit()
+        if is_browser:
+            return _issue_csrf_for_template(
+                request,
+                "auth/login.html",
+                {
+                    "current_user": None,
+                    "error": "Invalid email/username or password.",
+                    "next": _safe_next(next) or "",
+                },
+            )
         return JSONResponse(
             {"detail": "invalid credentials"},
             status_code=status.HTTP_401_UNAUTHORIZED,
         )
 
     # Success — rotate the cookie (defends session fixation).
-    payload = JSONResponse(
-        {"status": "ok", "user_id": user.id, "username": user.username, "role": user.role.value}
-    )
-    issue_session_cookie(payload, user_id=user.id)
     write_audit_log(
         session,
         actor_type=ActorType.user,
@@ -153,6 +198,17 @@ def post_login(
         request_id=request_id,
     )
     session.commit()
+
+    if is_browser:
+        target = _post_login_target(user.role, next)
+        redirect = RedirectResponse(url=target, status_code=status.HTTP_303_SEE_OTHER)
+        issue_session_cookie(redirect, user_id=user.id)
+        return redirect
+
+    payload = JSONResponse(
+        {"status": "ok", "user_id": user.id, "username": user.username, "role": user.role.value}
+    )
+    issue_session_cookie(payload, user_id=user.id)
     return payload
 
 

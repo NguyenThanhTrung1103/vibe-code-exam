@@ -13,9 +13,9 @@ import json
 from typing import Any
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile, status
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from pydantic import ValidationError
-from sqlalchemy import select
+from sqlalchemy import select, text
 
 from app.auth.permissions import RequireAdmin
 from app.deps import SessionDep
@@ -37,6 +37,38 @@ from app.services.excel_parser import auto_map, read_headers
 router = APIRouter(prefix="/admin/imports", tags=["admin", "imports"])
 
 
+# Canonical fields, grouped for the mapping page UI. Order matters in the UI.
+_REQUIRED_FIELDS: tuple[str, ...] = ("question_text", "option_a", "option_b", "correct_answer")
+_COMMUNITY_FIELDS: tuple[str, ...] = (
+    "discussion_url",
+    "external_question_id",
+    "discussion_count",
+    "vote_a",
+    "vote_b",
+    "vote_c",
+    "vote_d",
+    "vote_e",
+    "vote_f",
+)
+_OPTIONAL_FIELDS: tuple[str, ...] = (
+    "option_c",
+    "option_d",
+    "option_e",
+    # Alternative to option_a/b/c/d/e: a single dump-style cell containing
+    # all options separated by `;` / `；` / newlines. Surfacing it under the
+    # "Optional metadata" group keeps the required-fields card focused on
+    # the canonical question_text / option_a / option_b shape.
+    "combined_options",
+    "question_type",
+    "difficulty",
+    "topic",
+    "explanation",
+    "reference",
+    "tags",
+)
+_ALL_CANONICAL_FIELDS: tuple[str, ...] = _REQUIRED_FIELDS + _COMMUNITY_FIELDS + _OPTIONAL_FIELDS
+
+
 # ---------------------------------------------------------------------------
 # Step 1 — upload
 # ---------------------------------------------------------------------------
@@ -55,11 +87,30 @@ def upload_page(request: Request, user: RequireAdmin, session: SessionDep) -> HT
     return render_with_csrf(
         request,
         "admin/imports/upload.html",
-        {"current_user": user, "exams": exams, "recent": recent},
+        {"current_user": user, "exams": exams, "recent": recent, "error": None},
     )
 
 
-@router.post("", response_class=HTMLResponse, dependencies=[Depends(RL_ADMIN_IMPORT)])
+def _render_upload_with_error(
+    request: Request, user: object, session: object, message: str
+) -> HTMLResponse:
+    """Re-render the upload page with an inline error banner."""
+    exams = session.execute(  # type: ignore[attr-defined]
+        select(Exam, Course, Provider)
+        .join(Course, Exam.course_id == Course.id)
+        .join(Provider, Course.provider_id == Provider.id)
+        .where(Exam.deleted_at.is_(None))
+        .order_by(Provider.name, Course.name, Exam.name)
+    ).all()
+    recent = list(session.scalars(select(Import).order_by(Import.id.desc()).limit(20)))  # type: ignore[attr-defined]
+    return render_with_csrf(
+        request,
+        "admin/imports/upload.html",
+        {"current_user": user, "exams": exams, "recent": recent, "error": message},
+    )
+
+
+@router.post("", dependencies=[Depends(RL_ADMIN_IMPORT)])
 async def upload(
     request: Request,
     user: RequireAdmin,
@@ -67,17 +118,18 @@ async def upload(
     target_exam_id: int = Form(...),
     attestation: str = Form(...),
     csrf_token: str = Form(""),
+    title: str = Form(""),
     file: UploadFile = File(...),  # noqa: B008 — FastAPI marker
-) -> HTMLResponse:
+) -> Response:
     require_csrf(request, csrf_token)
     try:
         ImportUploadForm.model_validate(
             {"target_exam_id": target_exam_id, "attestation": attestation}
         )
     except ValidationError as exc:
-        return flash_error(request, str(exc.errors()[0]["msg"]))
+        return _render_upload_with_error(request, user, session, str(exc.errors()[0]["msg"]))
     if file.filename is None:
-        return flash_error(request, "no file uploaded")
+        return _render_upload_with_error(request, user, session, "No file uploaded.")
     file_bytes = await file.read()
     try:
         imp = import_service.create_import(
@@ -88,15 +140,36 @@ async def upload(
             file_name=file.filename,
             file_bytes=file_bytes,
             attestation=attestation,
+            title=title,
         )
     except import_service.UploadValidationError as exc:
-        return flash_error(request, str(exc))
+        return _render_upload_with_error(request, user, session, str(exc))
+    # Multi-format dispatch: XLSX needs the column-mapping wizard; HTML /
+    # PDF / TXT yield canonical rows from the adapter directly, so we
+    # parse + stage immediately and skip straight to the preview.
+    if imp.file_type == "xlsx":
+        session.commit()
+        return RedirectResponse(
+            url=f"/admin/imports/{imp.id}/mapping",
+            status_code=status.HTTP_303_SEE_OTHER,
+        )
+    try:
+        counts = import_service.parse_and_stage(
+            session,
+            actor=user,
+            request_id=request.headers.get(REQUEST_ID_HEADER),
+            import_id=imp.id,
+        )
+    except (import_service.UploadValidationError, import_service.ImportStateError) as exc:
+        session.rollback()
+        return _render_upload_with_error(request, user, session, str(exc))
     session.commit()
-    # Redirect to mapping step via HTMX HX-Redirect.
-    response = HTMLResponse(content="", status_code=200)
-    response.headers["HX-Redirect"] = f"/admin/imports/{imp.id}/mapping"
-    response.headers["Location"] = f"/admin/imports/{imp.id}/mapping"
-    return response
+    redirect = RedirectResponse(
+        url=f"/admin/imports/{imp.id}/preview",
+        status_code=status.HTTP_303_SEE_OTHER,
+    )
+    redirect.headers["X-Import-Counts"] = json.dumps(counts)
+    return redirect
 
 
 # ---------------------------------------------------------------------------
@@ -104,23 +177,36 @@ async def upload(
 # ---------------------------------------------------------------------------
 
 
-@router.get("/{import_id}/mapping", response_class=HTMLResponse)
-def mapping_page(
+def _render_mapping(
     request: Request,
+    user: object,
+    session: object,
     import_id: int,
-    user: RequireAdmin,
-    session: SessionDep,
+    *,
+    override_mapping: dict[str, str | None] | None = None,
+    error: str | None = None,
 ) -> HTMLResponse:
-    imp = session.get(Import, import_id)
+    """Render `mapping.html` with optional override mapping + error banner.
+
+    `override_mapping` lets the POST handler preserve the admin's just-attempted
+    selections when re-rendering after a validation failure (so the form state
+    doesn't reset to whatever was last persisted on disk).
+    """
+    imp = session.get(Import, import_id)  # type: ignore[attr-defined]
     if imp is None or imp.file_path is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
     sheet, headers = read_headers(imp.file_path)
     suggested = auto_map(headers)
-    if imp.column_mapping:
-        # Prefer admin's saved mapping if present.
-        for h in headers:
-            if h in imp.column_mapping:
-                suggested[h] = imp.column_mapping[h]
+    persisted = imp.column_mapping or {}
+    for h in headers:
+        if override_mapping is not None and h in override_mapping:
+            suggested[h] = override_mapping[h]
+        elif h in persisted:
+            suggested[h] = persisted[h]
+    mapped_fields = {v: k for k, v in suggested.items() if v}
+    target_exam = (
+        session.get(Exam, imp.target_exam_id) if imp.target_exam_id else None  # type: ignore[attr-defined]
+    )
     return render_with_csrf(
         request,
         "admin/imports/mapping.html",
@@ -130,17 +216,44 @@ def mapping_page(
             "sheet": sheet,
             "headers": headers,
             "suggested": suggested,
+            "mapped_fields": mapped_fields,
+            "target_exam": target_exam,
+            "required_fields": _REQUIRED_FIELDS,
+            "community_fields": _COMMUNITY_FIELDS,
+            "optional_fields": _OPTIONAL_FIELDS,
+            "all_canonical_fields": _ALL_CANONICAL_FIELDS,
+            "error": error,
         },
     )
 
 
-@router.post("/{import_id}/mapping", response_class=HTMLResponse)
+@router.get("/{import_id}/mapping")
+def mapping_page(
+    request: Request,
+    import_id: int,
+    user: RequireAdmin,
+    session: SessionDep,
+) -> Response:
+    imp = session.get(Import, import_id)
+    if imp is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
+    # Adapter-based formats produce canonical rows directly — no mapping
+    # step. Bounce straight to the preview.
+    if imp.file_type and imp.file_type != "xlsx":
+        return RedirectResponse(
+            url=f"/admin/imports/{import_id}/preview",
+            status_code=status.HTTP_303_SEE_OTHER,
+        )
+    return _render_mapping(request, user, session, import_id)
+
+
+@router.post("/{import_id}/mapping")
 async def save_mapping(
     request: Request,
     import_id: int,
     user: RequireAdmin,
     session: SessionDep,
-) -> HTMLResponse:
+) -> Response:
     form = await request.form()
     require_csrf(request, str(form.get("csrf_token", "")))
     column_mapping: dict[str, str | None] = {}
@@ -166,16 +279,35 @@ async def save_mapping(
             import_id=import_id,
         )
     except import_service.UploadValidationError as exc:
-        return flash_error(request, str(exc))
+        # Re-render the mapping page (with the admin's just-attempted picks
+        # preserved) instead of dropping them on a raw plain-text error page.
+        session.rollback()
+        return _render_mapping(
+            request,
+            user,
+            session,
+            import_id,
+            override_mapping=column_mapping,
+            error=str(exc),
+        )
     except import_service.ImportStateError as exc:
-        return flash_error(request, str(exc))
+        session.rollback()
+        return _render_mapping(
+            request,
+            user,
+            session,
+            import_id,
+            override_mapping=column_mapping,
+            error=str(exc),
+        )
     session.commit()
 
-    response = HTMLResponse(content="", status_code=200)
-    response.headers["HX-Redirect"] = f"/admin/imports/{import_id}/preview"
-    response.headers["Location"] = f"/admin/imports/{import_id}/preview"
-    response.headers["X-Import-Counts"] = json.dumps(counts)
-    return response
+    redirect = RedirectResponse(
+        url=f"/admin/imports/{import_id}/preview",
+        status_code=status.HTTP_303_SEE_OTHER,
+    )
+    redirect.headers["X-Import-Counts"] = json.dumps(counts)
+    return redirect
 
 
 # ---------------------------------------------------------------------------
@@ -225,6 +357,7 @@ def preview_page(
     ).all()
     counts = {r[0].value: r[1] for r in counts_rows}
 
+    target_exam = session.get(Exam, imp.target_exam_id) if imp.target_exam_id else None
     return render_with_csrf(
         request,
         "admin/imports/preview.html",
@@ -235,6 +368,7 @@ def preview_page(
             "filter": f,
             "page": page,
             "counts": counts,
+            "target_exam": target_exam,
         },
     )
 
@@ -269,14 +403,14 @@ def toggle_item(
 # ---------------------------------------------------------------------------
 
 
-@router.post("/{import_id}/confirm", response_class=HTMLResponse)
+@router.post("/{import_id}/confirm")
 def confirm(
     request: Request,
     import_id: int,
     user: RequireAdmin,
     session: SessionDep,
     csrf_token: str = Form(""),
-) -> HTMLResponse:
+) -> Response:
     require_csrf(request, csrf_token)
     try:
         summary = import_service.confirm_import(
@@ -291,11 +425,12 @@ def confirm(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
     session.commit()
 
-    response = HTMLResponse(content="", status_code=200)
-    response.headers["HX-Redirect"] = f"/admin/imports/{import_id}/done"
-    response.headers["Location"] = f"/admin/imports/{import_id}/done"
-    response.headers["X-Confirm-Summary"] = json.dumps(summary)
-    return response
+    redirect = RedirectResponse(
+        url=f"/admin/imports/{import_id}/done",
+        status_code=status.HTTP_303_SEE_OTHER,
+    )
+    redirect.headers["X-Confirm-Summary"] = json.dumps(summary)
+    return redirect
 
 
 @router.get("/{import_id}/done", response_class=HTMLResponse)
@@ -316,8 +451,41 @@ def done(
         .group_by(ImportItem.status)
     ).all()
     counts: dict[str, Any] = {r[0].value: r[1] for r in counts_rows}
+
+    target_exam = session.get(Exam, imp.target_exam_id) if imp.target_exam_id else None
+    # Read-only ad-hoc queries: first question id + community sources count for
+    # this import. Avoid hard ORM coupling to the Question/CDS models — keeps
+    # the import wizard module self-contained.
+    first_q = session.execute(
+        text(
+            "SELECT id FROM questions WHERE source_import_id = :iid "
+            "AND deleted_at IS NULL ORDER BY id ASC LIMIT 1"
+        ),
+        {"iid": imp.id},
+    ).first()
+    first_question_id = first_q[0] if first_q else None
+    community_sources_count = (
+        session.execute(
+            text(
+                "SELECT count(*) FROM community_discussion_sources "
+                "WHERE question_id IN ("
+                "  SELECT id FROM questions WHERE source_import_id = :iid"
+                ")"
+            ),
+            {"iid": imp.id},
+        ).scalar()
+        or 0
+    )
+
     return render_with_csrf(
         request,
         "admin/imports/done.html",
-        {"current_user": user, "imp": imp, "counts": counts},
+        {
+            "current_user": user,
+            "imp": imp,
+            "counts": counts,
+            "target_exam": target_exam,
+            "first_question_id": first_question_id,
+            "community_sources_count": community_sources_count,
+        },
     )

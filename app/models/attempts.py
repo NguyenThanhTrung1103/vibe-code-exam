@@ -30,9 +30,13 @@ class Attempt(Base):
     __tablename__ = "attempts"
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
-    user_id: Mapped[int] = mapped_column(
-        BigInteger, ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
+    # Either user_id (authenticated owner) or guest_token (anonymous owner) is
+    # set — DB CHECK constraint `ck_attempts_owner` enforces this. Migration
+    # 0008_attempts_guest_token relaxed user_id to NULLABLE.
+    user_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("users.id", ondelete="RESTRICT"), nullable=True
     )
+    guest_token: Mapped[str | None] = mapped_column(String(64), nullable=True)
     exam_id: Mapped[int] = mapped_column(
         BigInteger, ForeignKey("exams.id", ondelete="RESTRICT"), nullable=False
     )

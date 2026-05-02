@@ -1,22 +1,30 @@
-{% set q = (item.normalized_data or {}).get('question_text') or '' %}
-{% set correct = (item.normalized_data or {}).get('correct_answer') or [] %}
+{% set nd = item.normalized_data or {} %}
+{% set q = nd.get('question_text') or '' %}
+{% set correct = nd.get('correct_answer') or [] %}
+{% set ext_qid = nd.get('external_question_id') or '' %}
+{% set disc_url = nd.get('discussion_url') or '' %}
+{% set vote_summary = [] %}
+{% for letter in ['a','b','c','d','e','f'] %}
+  {% set vk = 'vote_' ~ letter %}
+  {% if nd.get(vk) is not none and nd.get(vk) != '' %}{% set _ = vote_summary.append(letter|upper ~ '=' ~ (nd.get(vk)|string)) %}{% endif %}
+{% endfor %}
 <tr id="item-{{ item.id }}">
   <td>{{ item.row_number }}</td>
-  <td><span class="exam-status status-{{ item.status.value }}">{{ item.status.value }}</span></td>
-  <td>{{ q[:80] }}{% if q|length > 80 %}…{% endif %}</td>
+  <td><span class="pill pill-{{ item.status.value }}">{{ item.status.value }}</span></td>
+  <td title="{{ q }}">{{ q[:80] }}{% if q|length > 80 %}…{% endif %}</td>
   <td>{{ correct|join(',') }}</td>
+  <td>{% if ext_qid %}<span class="code-chip">{{ ext_qid }}</span>{% else %}<span class="muted">—</span>{% endif %}</td>
+  <td>{% if disc_url %}<span class="pill pill-imported">link</span>{% else %}<span class="muted">—</span>{% endif %}</td>
+  <td>{% if vote_summary %}<span class="muted">{{ vote_summary|join(' · ') }}</span>{% else %}<span class="muted">—</span>{% endif %}</td>
   <td>
-    {% if item.error_message %}<small>{{ item.error_message }}</small>{% endif %}
-    {% if item.warning_message %}<small>{{ item.warning_message }}</small>{% endif %}
+    {% if item.error_message %}<span class="alert alert-error" style="display:inline-block;padding:2px 8px;font-size:12px;margin:0;">{{ item.error_message }}</span>{% endif %}
+    {% if item.warning_message %}<span class="alert alert-warning" style="display:inline-block;padding:2px 8px;font-size:12px;margin:0;">{{ item.warning_message }}</span>{% endif %}
   </td>
   <td>
     {% if item.status.value in ('ok','skipped') %}
-      <button class="btn"
-              type="button"
+      <button class="btn-ghost" type="button"
               hx-post="/admin/imports/{{ item.import_id }}/items/{{ item.id }}/toggle"
-              hx-include="#page-csrf"
-              hx-target="#item-{{ item.id }}"
-              hx-swap="outerHTML">
+              hx-include="#page-csrf" hx-target="#item-{{ item.id }}" hx-swap="outerHTML">
         {% if item.status.value == 'ok' %}Skip{% else %}Reselect{% endif %}
       </button>
     {% endif %}

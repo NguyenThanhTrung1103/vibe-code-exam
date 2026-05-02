@@ -29,6 +29,14 @@ _INVISIBLE_CHARS = re.compile(
 _INTERNAL_WS = re.compile(r"[ \t\r\f\v]+")
 _LINE_RUN = re.compile(r"\n{3,}")
 
+# Strips a leading ordinal label like "A.", "A)", "A:", "A-", "1)", "1.", etc.
+# from the start of a single split-out option text. Lets dump-style cells
+# such as "A. Foo; B. Bar" yield clean "Foo" / "Bar".
+_OPTION_PREFIX_RE = re.compile(r"^\s*[A-Fa-f1-6]\s*[\.\)\:\-]\s*")
+# Splits a combined-options cell on `;` (Latin), `；` (fullwidth), or any
+# newline run. Whitespace around each piece is trimmed by the caller.
+_COMBINED_SPLIT_RE = re.compile(r"[;；\r\n]+")
+
 
 def normalize_text(value: str | None) -> str | None:
     """Return the cleaned, sanitized version of `value`. None passes through."""
@@ -56,6 +64,11 @@ def normalize_row(raw: dict[str, Any]) -> dict[str, Any]:
 
     Non-string values (numbers, bools, dates) pass through untouched. Lists are
     normalised element-wise.
+
+    Post-step: if `combined_options` is mapped (a single dump-style cell that
+    holds all options separated by `;` / `；` / newlines), split it into
+    `option_a` ... `option_f` slots that the validator already understands.
+    Individual `option_*` keys already present win over the split values.
     """
     out: dict[str, Any] = {}
     for k, v in raw.items():
@@ -65,4 +78,34 @@ def normalize_row(raw: dict[str, Any]) -> dict[str, Any]:
             out[k] = [normalize_text(x) if isinstance(x, str) else x for x in v]
         else:
             out[k] = v
+
+    combined = out.pop("combined_options", None)
+    if combined:
+        parts = split_combined_options(str(combined))
+        for label, text in zip(("a", "b", "c", "d", "e", "f"), parts, strict=False):
+            key = f"option_{label}"
+            if not out.get(key):
+                out[key] = text
     return out
+
+
+def split_combined_options(value: str) -> list[str]:
+    """Split a dump-style combined-options cell into clean option texts.
+
+    Splits on `;` / `；` / newline runs (whichever are present), trims, and
+    strips leading ordinal labels like "A.", "B)", "1:".
+    Returns a list (possibly empty); caller is responsible for the
+    "≥ 2 options" check.
+    """
+    if not value:
+        return []
+    pieces = _COMBINED_SPLIT_RE.split(value)
+    cleaned: list[str] = []
+    for p in pieces:
+        s = p.strip()
+        if not s:
+            continue
+        s = _OPTION_PREFIX_RE.sub("", s).strip()
+        if s:
+            cleaned.append(s)
+    return cleaned

@@ -5,6 +5,85 @@ phase completion. Phase reports under `plans/reports/` are the
 authoritative source for the phase-level narrative; this file is the
 short-form digest.
 
+## 2026-05-02 — Multi-format admin import (Milestone 1)
+
+**Status:** ✅ Shipped to LXC `192.168.99.97`. 294 / 294 hermetic tests
+pass; 3 fixture smokes (XLSX, HTML, PDF) confirmed end-to-end on the
+deployed instance with `258` questions, `1066` options, `164` explanations,
+and `57` community sources created across imports 137 / 138 / 139 (all
+private/draft under `exam_id=1`).
+
+**Highlights**
+
+- Multi-format upload — admin import accepts `.xlsx`, saved `.html`/`.htm`,
+  `.pdf`, and `.txt` dumps. XLSX still walks the column-mapping wizard;
+  HTML / PDF / TXT skip mapping (the parser-adapter emits canonical
+  rows directly) and go straight to preview.
+- Parser-adapter layer at `app/services/parsers/`:
+  - `xlsx_adapter.py` — wraps the existing `excel_parser.stream_rows` so
+    Vietnamese aliases + `combined_options` continue to work unchanged.
+  - `examtopics_html_adapter.py` — saved ExamTopics pages. Pulls
+    `correct_answer` + per-letter `vote_distribution` from the JSON
+    payload inside `.voted-answers-tally script`; absolutizes relative
+    `/discussions/...` URLs against the saved page's `<base href>`.
+  - `qblock_pdf_adapter.py` + `qblock_text_adapter.py` — `QUESTION N`
+    block style with `A./B./C./D.`, `Answer:`, `Explanation:`. PDF path
+    delegates to the text parser via `pdfminer.six.high_level.extract_text`.
+  - `detector.py` — picks the highest-priority adapter per file via
+    extension + first-4-KB magic. The picked adapter's `name` is stored
+    on `imports.detected_format` for UI display and downstream policies.
+- `app/security/upload_validator.py` — `validate_upload_bytes(...)`
+  returns the family (xlsx / html / pdf / txt). `validate_xlsx_bytes`
+  kept for legacy callers.
+- `app/services/import_validator.py` — multi-letter answer support:
+  contiguous A–F runs (`BD`, `ACE`, …) expand to per-letter resolution.
+  Lifts 17 PDF rows from `error` → `ok`.
+- New columns:
+  - `imports.title` (`varchar(255) NULL`) — admin label, falls back to
+    file_name in UI.
+  - `imports.detected_format` (`varchar(32) NULL`) — adapter name.
+  - `attempts.user_id` made nullable; `attempts.guest_token`
+    (`varchar(64) NULL`); `ck_attempts_owner` CHECK; partial index
+    `ix_attempts_guest_token`. (Schema landed for Milestone 2 guest
+    practice; HTTP layer dormant.)
+- Login page now respects `?next=…` post-login; admin pages return a
+  303 redirect to `/auth/login?next=<path>` for unauthenticated browser
+  navigation (Accept: text/html), instead of a bare 401 JSON.
+- Admin "Recent imports" table now shows the detected_format chip.
+- `app/auth/guest.py` ships dormant — present in code but no router
+  imports it; deferred until Milestone 2.
+
+**Migrations added**
+
+- `0007_c2d3e4f5a6b7_imports_add_title.py`
+- `0008_d3e4f5a6b7c8_attempts_guest_token.py`
+- `0009_e4f5a6b7c8d9_imports_detected_format.py`
+
+**Tests added**
+
+- `tests/services/test_parser_adapters.py` — adapter contract + golden
+  fixture coverage for XLSX (Vietnamese CCNA), HTML (57q ExamTopics),
+  PDF (166q PassLeader).
+- `tests/test_import_unit.py` — VN combined_options regression +
+  zero-staged-rows confirm guard.
+
+**Tests run** — `uv run pytest`: 294 passed / 98 skipped (real-DB gate)
+/ 0 failed.
+
+**Deployment** — see `docs/reports/changelog-local.md` for the dated
+deploy log (DB backup, alembic before/after, schema verification,
+healthcheck). Instance restarted only `exam-platform-web.service`.
+
+**Operator runbook** — `docs/ops/exam-platform-import-runbook.md`.
+**Implementation report** — `docs/reports/exam-platform-multiformat-import-implementation.md`.
+**Browser QA URLs** — `docs/reports/exam-platform-multiformat-qa-urls.md`.
+
+**Process note** — engineering mistake captured as a permanent rule:
+the agent guessed raw `ssh user@host` against `192.168.99.97` instead of
+resolving the configured `exam-lxc` alias, and prematurely concluded
+"deploy blocked". Documented at `.claude/skills/ssh/SKILL.md` so future
+runs check `ssh -G <alias>` first.
+
 ## 2026-04-30 — Phase 12 — Beta launch readiness (Gate-A scaffolding)
 
 **Status:** ✅ Complete (Gate-A scaffolding scope; live content seed and

@@ -111,30 +111,78 @@ def _collect_correct_answer(
     options: list[tuple[str, str]],
     errors: list[str],
 ) -> list[str]:
+    """Normalize a correct_answer cell against the parsed options.
+
+    Accepts (in order of fallback):
+      1. Letter labels:  A / B / ... / F  (single or multi via ; , space)
+      2. Numeric labels: 1..6 → A..F
+      3. Verbatim option text matching one of `options` (case-fold compare)
+
+    Anything that fails all three lands as a row-level error with the
+    message `Cannot resolve correct_answer from value: <value>`.
+    """
     raw = normalized.get("correct_answer")
     if not raw:
         errors.append("correct_answer required")
         return []
     if isinstance(raw, list):
-        labels_raw = raw
+        entries = [str(x).strip() for x in raw if str(x).strip()]
     else:
-        # Accept "A", "A,B", "A;B", "A B"
         text = str(raw)
-        labels_raw = [
-            s.strip() for s in text.replace(";", ",").replace(" ", ",").split(",") if s.strip()
+        # Split on , ; newline. Don't split on spaces — option text often
+        # contains spaces (e.g. "Sample answer A").
+        entries = [
+            s.strip() for s in text.replace(";", ",").replace("\n", ",").split(",") if s.strip()
         ]
+    # Multi-answer convenience: PDF/HTML dumps frequently express multi-select
+    # answers as a contiguous run of A–F letters (e.g. "BD", "ACE") with no
+    # separator. Expand any such entry into individual single-letter entries
+    # so the per-letter resolution path below sees them as A, C, E.
+    expanded: list[str] = []
+    for entry in entries:
+        u = entry.upper()
+        if 2 <= len(u) <= 6 and all(ch in "ABCDEF" for ch in u):
+            expanded.extend(u)
+        else:
+            expanded.append(entry)
+    entries = expanded
     valid_labels = {label for label, _ in options}
+    text_to_label: dict[str, str] = {
+        opt_text.casefold().strip(): label for label, opt_text in options if opt_text
+    }
     chosen: list[str] = []
-    for entry in labels_raw:
-        u = str(entry).upper()
-        if u not in OPTION_LABELS:
-            errors.append(f"correct_answer label {u!r} unknown")
+    for entry in entries:
+        u = entry.upper()
+        # 1. Single alpha → letter label path (keeps "unknown label" wording
+        #    for things like 'Z' / 'X' that look like labels but aren't A..F).
+        if len(u) == 1 and u.isalpha():
+            if u not in OPTION_LABELS:
+                errors.append(f"correct_answer label {u!r} unknown")
+                continue
+            if u not in valid_labels:
+                errors.append(f"correct_answer label {u!r} has no matching option")
+                continue
+            if u not in chosen:
+                chosen.append(u)
             continue
-        if u not in valid_labels:
-            errors.append(f"correct_answer label {u!r} has no matching option")
+        # 2. Numeric 1..N
+        if u.isdigit():
+            n = int(u)
+            if 1 <= n <= len(OPTION_LABELS):
+                letter = OPTION_LABELS[n - 1]
+                if letter in valid_labels and letter not in chosen:
+                    chosen.append(letter)
+                    continue
+                errors.append(f"correct_answer numeric {u!r} → {letter!r} has no matching option")
+                continue
+            errors.append(f"correct_answer numeric {u!r} out of range")
             continue
-        if u not in chosen:
-            chosen.append(u)
+        # 3. Verbatim option text (case-insensitive)
+        match = text_to_label.get(entry.casefold().strip())
+        if match and match not in chosen:
+            chosen.append(match)
+            continue
+        errors.append(f"Cannot resolve correct_answer from value: {entry!r}")
     if not chosen and "correct_answer required" not in errors:
         errors.append("correct_answer must reference at least one option")
     return chosen

@@ -55,6 +55,7 @@ def list_questions(request: Request, user: RequireAdmin, session: SessionDep) ->
     qp = request.query_params
     exam_id = _opt_int(qp.get("exam_id"))
     topic_id = _opt_int(qp.get("topic_id"))
+    source_import_id = _opt_int(qp.get("source_import_id"))
     status_filter = qp.get("status")
     difficulty_filter = qp.get("difficulty")
     text_q = qp.get("q") or ""
@@ -72,6 +73,8 @@ def list_questions(request: Request, user: RequireAdmin, session: SessionDep) ->
         stmt = stmt.where(Question.exam_id == exam_id)
     if topic_id:
         stmt = stmt.where(Question.topic_id == topic_id)
+    if source_import_id:
+        stmt = stmt.where(Question.source_import_id == source_import_id)
     if status_filter and status_filter != "all":
         with contextlib.suppress(ValueError):
             stmt = stmt.where(Question.status == QuestionStatus(status_filter))
@@ -95,6 +98,7 @@ def list_questions(request: Request, user: RequireAdmin, session: SessionDep) ->
             "filters": {
                 "exam_id": exam_id or "",
                 "topic_id": topic_id or "",
+                "source_import_id": source_import_id or "",
                 "status": status_filter or "",
                 "difficulty": difficulty_filter or "",
                 "q": text_q,

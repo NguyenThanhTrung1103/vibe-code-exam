@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+{% block extra_head %}
+  <link rel="stylesheet" href="{{ url_for('static', path='css/admin.css') }}" />
+{% endblock %}
+{% block body_class %}has-admin-shell{% endblock %}
+{% block main_class %}admin-shell{% endblock %}
+{% block content %}
+  <p class="admin-eyebrow">Admin</p>
+  {% block admin_content %}{% endblock %}
+{% endblock %}

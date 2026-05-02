@@ -3,12 +3,18 @@
 `require_role(*roles)` raises 401 if the caller is anonymous and 403 if
 the caller is logged in but lacks the role. Conflating them confuses both
 users and crawlers — keep them distinct (RFC 7235 / 7231).
+
+For browser navigation (Accept: text/html), an unauthenticated request
+returns a 303 redirect to /auth/login?next=<path> instead of bare 401 —
+the 401 JSON body is hostile UX for users typing URLs into a browser.
+API/JSON callers continue to receive 401 unchanged.
 """
 
 from __future__ import annotations
 
 from collections.abc import Callable
 from typing import Annotated
+from urllib.parse import quote
 
 from fastapi import Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
@@ -18,6 +24,21 @@ from app.auth.session import read_session_user_id
 from app.deps import SessionDep
 from app.models.enums import UserRole
 from app.models.users import User
+
+
+def _wants_html(request: Request) -> bool:
+    return "text/html" in request.headers.get("accept", "").lower()
+
+
+def _login_redirect_for(request: Request) -> HTTPException:
+    path = request.url.path
+    if request.url.query:
+        path = f"{path}?{request.url.query}"
+    return HTTPException(
+        status_code=status.HTTP_303_SEE_OTHER,
+        detail="login required",
+        headers={"Location": f"/auth/login?next={quote(path, safe='/?=&')}"},
+    )
 
 
 def get_current_user(
@@ -37,6 +58,8 @@ def get_current_user_required(
 ) -> User:
     user = get_current_user(request, session)
     if user is None:
+        if _wants_html(request):
+            raise _login_redirect_for(request)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="not authenticated",
@@ -55,6 +78,8 @@ def require_role(*allowed: UserRole) -> Callable[..., User]:
     ) -> User:
         user = get_current_user(request, session)
         if user is None:
+            if _wants_html(request):
+                raise _login_redirect_for(request)
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="not authenticated",

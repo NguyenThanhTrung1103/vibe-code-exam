@@ -9,6 +9,7 @@ Caller passes a workbook path + the column mapping
 
 from __future__ import annotations
 
+import unicodedata
 from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path
@@ -30,6 +31,11 @@ CANONICAL_FIELDS = (
     "option_c",
     "option_d",
     "option_e",
+    # `combined_options` — alternative to mapping option_a/b/c/d/e individually.
+    # When mapped, the normalizer splits the cell value on `;` / `；` / newline
+    # into option_a..option_f, so dump-style sheets with a single answer-list
+    # column work end-to-end without admin pre-processing.
+    "combined_options",
     "correct_answer",
     "explanation",
     "reference",
@@ -49,7 +55,10 @@ REQUIRED_FIELDS = ("question_text", "option_a", "option_b", "correct_answer")
 MAX_COLUMNS = 32  # safety cap — too-wide sheet → reject.
 
 
-# Common header alias map for auto-mapping.
+# Common header alias map for auto-mapping. Keys are the post-normalized
+# (lowercase, accent-stripped, alphanumeric-only) form of the header label.
+# Values are the canonical field names. Vietnamese aliases land here after
+# accent stripping — see `_normalize_header()` below.
 _ALIAS = {
     "question": "question_text",
     "questiontext": "question_text",
@@ -93,7 +102,26 @@ _ALIAS = {
     "voted": "vote_d",
     "votee": "vote_e",
     "votef": "vote_f",
+    # --- Vietnamese / dump-style aliases (accent-stripped form) ---
+    "cauhoi": "question_text",  # "Câu hỏi"
+    "noidungcauhoi": "question_text",  # "Nội dung câu hỏi"
+    "cautraloidung": "correct_answer",  # "Câu trả lời đúng"
+    "dapandung": "correct_answer",  # "Đáp án đúng"
+    "giaithichdapan": "explanation",  # "Giải thích đáp án"
+    "giaithich": "explanation",  # "Giải thích"
+    "motathem": "explanation",  # "Mô tả thêm"
+    "chude": "topic",  # "Chủ đề"
+    "linhvuc": "topic",  # "Lĩnh vực"
+    "dokho": "difficulty",  # "Độ khó"
+    "danhsachdapan": "combined_options",  # "Danh sách đáp án"
+    "cacdapan": "combined_options",  # "Các đáp án"
+    "dapan": "combined_options",  # "Đáp án" (alone — list)
+    "thetag": "tags",  # "Thẻ tag"
 }
+
+# Sorted aliases (longest key first) so substring matching against long
+# Vietnamese header labels prefers more specific matches.
+_ALIAS_BY_LEN: list[tuple[str, str]] = sorted(_ALIAS.items(), key=lambda kv: -len(kv[0]))
 
 
 @dataclass(slots=True)
@@ -104,18 +132,49 @@ class ParsedRow:
 
 
 def auto_map(headers: list[str]) -> dict[str, str | None]:
-    """Best-effort header → canonical mapping. Unknown headers map to None."""
+    """Best-effort header → canonical mapping. Unknown headers map to None.
+
+    Lookup order:
+      1. Exact match on the normalized header form.
+      2. Substring match against any registered alias key (longest-first), so
+         long descriptive labels like "Đáp án đúng (ví dụ trả lời 1...)" still
+         resolve to `correct_answer` via the embedded "dapandung" substring.
+    """
     out: dict[str, str | None] = {}
     for h in headers:
         if not h:
             continue
         key = _normalize_header(h)
-        out[h] = _ALIAS.get(key)
+        if not key:
+            out[h] = None
+            continue
+        match = _ALIAS.get(key)
+        if match is None:
+            # Substring fallback only for aliases of length >= 4 — short aliases
+            # ("a", "b", "q", "url"...) match too eagerly inside long words like
+            # "random", "topic", "url" etc. Long Vietnamese alias keys
+            # ("dapandung", "cauhoi", "danhsachdapan") still resolve.
+            for alias, canonical in _ALIAS_BY_LEN:
+                if len(alias) >= 4 and alias in key:
+                    match = canonical
+                    break
+        out[h] = match
     return out
 
 
 def _normalize_header(label: str) -> str:
-    return "".join(ch for ch in label.lower() if ch.isalnum())
+    """Lower-case + strip diacritics + keep alphanumerics only.
+
+    Accent stripping lets Vietnamese accented forms ("Câu hỏi") and their
+    ASCII transliterations ("Cau hoi") share a single alias entry.
+
+    Vietnamese `đ` / `Đ` (U+0111 / U+0110) have no NFKD decomposition, so
+    they are explicitly folded to ASCII `d` after the lower-case pass.
+    """
+    decomposed = unicodedata.normalize("NFKD", label.lower())
+    no_accents = "".join(ch for ch in decomposed if not unicodedata.combining(ch))
+    no_accents = no_accents.replace("đ", "d")  # already lower-cased above
+    return "".join(ch for ch in no_accents if ch.isalnum())
 
 
 def read_headers(path: Path | str) -> tuple[str, list[str]]:

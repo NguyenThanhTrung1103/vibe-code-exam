@@ -1,19 +1,22 @@
 {% extends "auth/_layout.html" %}
-{% block title %}Sign in — Exam Platform{% endblock %}
-{% block auth_title %}Sign in{% endblock %}
+{% block title %}Admin Login — Exam Platform{% endblock %}
+{% block auth_title %}Admin Login{% endblock %}
+{% block auth_subtitle %}
+  <p class="auth-subtitle">Sign in to manage imports and question data.</p>
+{% endblock %}
 {% block auth_form %}
-  <form method="post" action="/auth/login" hx-post="/auth/login" hx-target="#auth-result" hx-swap="innerHTML">
+  <form method="post" action="/auth/login">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
-    <label>
-      Email or username
-      <input type="text" name="identifier" autocomplete="username" required />
-    </label>
-    <label>
-      Password
-      <input type="password" name="password" autocomplete="current-password" required />
-    </label>
-    <button type="submit" class="btn">Sign in</button>
+    <input type="hidden" name="next" value="{{ next or '' }}" />
+    <div class="field">
+      <label class="field-label" for="login-identifier">Email or username</label>
+      <input id="login-identifier" type="text" name="identifier" autocomplete="username" required />
+    </div>
+    <div class="field">
+      <label class="field-label" for="login-password">Password</label>
+      <input id="login-password" type="password" name="password" autocomplete="current-password" required />
+    </div>
+    <button type="submit" class="btn-primary">Sign in</button>
   </form>
-  <div id="auth-result" aria-live="polite"></div>
-  <p><a href="/auth/register">Create an account</a></p>
+  <p class="auth-foot"><a href="/auth/register">Create an account</a></p>
 {% endblock %}

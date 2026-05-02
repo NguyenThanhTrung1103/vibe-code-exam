@@ -27,7 +27,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
@@ -56,19 +56,22 @@ from app.security.upload_validator import (
     XLSX_MAGIC as _XLSX_MAGIC_RE,  # re-export below
 )
 from app.security.upload_validator import (
-    validate_xlsx_bytes,
+    validate_upload_bytes,
 )
 from app.services.excel_parser import (
     CANONICAL_FIELDS,
-    REQUIRED_FIELDS,
     auto_map,
     read_headers,
     stream_rows,
+)
+from app.services.excel_parser import (
+    ParsedRow as _ParsedRow,
 )
 from app.services.import_community import upsert_community_source
 from app.services.import_dedup import content_hash, existing_question_hashes_for_exam
 from app.services.import_normalizer import normalize_row
 from app.services.import_validator import OPTION_LABELS, ValidationResult, validate_row
+from app.services.parsers import detect_adapter as _detect_adapter
 
 XLSX_MAGIC = _XLSX_MAGIC_RE  # zip header — `.xlsx` is a zip (Phase 09 owner: app.security)
 
@@ -99,15 +102,18 @@ def create_import(
     file_name: str,
     file_bytes: bytes,
     attestation: str,
+    title: str | None = None,
 ) -> Import:
     """Validate the upload bytes, save the file, insert the `imports` row.
 
+    `title` is an optional admin-supplied label; falls back to file_name in UI.
     Caller commits.
     """
     settings = get_settings()
     # Phase 09: extension + magic + size validation centralised in app.security.
+    # Multi-format extension (Milestone 1): accept xlsx / html / pdf / txt.
     try:
-        validate_xlsx_bytes(
+        family = validate_upload_bytes(
             file_bytes,
             max_bytes=settings.import_max_bytes,
             filename=file_name,
@@ -123,26 +129,40 @@ def create_import(
     if not attestation or len(attestation.strip()) < 4:
         raise UploadValidationError("attestation required (≥4 chars)")
 
+    title_clean = (title or "").strip() or None
     imp = Import(
         uploaded_by=actor.id,
         file_name=safe_name,
-        file_type="xlsx",
+        file_type=family,
         target_exam_id=target_exam_id,
         status=ImportStatus.uploaded,
         import_source_claim=attestation.strip(),
+        title=title_clean,
     )
     session.add(imp)
     session.flush()  # assign id
 
-    # Save file at uploads_dir/imports/{import_id}.xlsx — never mix admin path.
+    # Save file at uploads_dir/imports/{import_id}.{ext} — keep the family
+    # extension so the on-disk shape matches what parsers expect to open.
+    ext_for_family = {"xlsx": ".xlsx", "html": ".html", "pdf": ".pdf", "txt": ".txt"}
     base = Path(settings.uploads_dir) / "imports"
     base.mkdir(parents=True, exist_ok=True)
-    final_path = base / f"{imp.id}.xlsx"
+    final_path = base / f"{imp.id}{ext_for_family.get(family, '.bin')}"
     final_path.write_bytes(file_bytes)
     # Some filesystems (Windows tests) don't honour POSIX perms.
     with contextlib.suppress(OSError):
         final_path.chmod(0o600)
     imp.file_path = str(final_path)
+
+    # Run the format detector now that the file is on disk. Failure to
+    # detect is non-fatal — admin can still proceed with the wizard and
+    # the XLSX path always wins for `.xlsx` uploads via the alias map.
+    try:
+        adapter = _detect_adapter(filename=safe_name, file_path=final_path)
+        if adapter is not None:
+            imp.detected_format = adapter.name
+    except Exception:  # noqa: BLE001 — detector failure must never block upload
+        imp.detected_format = None
 
     write_audit_log(
         session,
@@ -186,8 +206,18 @@ def save_mapping(
 ) -> Import:
     imp = _get_import_or_raise(session, import_id)
     # Reject mappings that don't cover all required canonical fields.
+    # Either option_a+option_b OR combined_options satisfies the option
+    # requirement — combined_options is split into option_a..f at parse time.
     mapped_fields = {v for v in column_mapping.values() if v}
-    missing = [f for f in REQUIRED_FIELDS if f not in mapped_fields]
+    has_options = "combined_options" in mapped_fields or (
+        "option_a" in mapped_fields and "option_b" in mapped_fields
+    )
+    missing: list[str] = []
+    for required_core in ("question_text", "correct_answer"):
+        if required_core not in mapped_fields:
+            missing.append(required_core)
+    if not has_options:
+        missing.append("option_a + option_b OR combined_options")
     if missing:
         raise UploadValidationError(f"mapping missing required fields: {missing}")
     # Validate every mapped value lands in the canonical set.
@@ -222,14 +252,17 @@ def parse_and_stage(
     request_id: str | None,
     import_id: int,
 ) -> dict[str, int]:
-    """Read the workbook, write one `import_items` row per data row.
+    """Read the file, write one `import_items` row per data row.
 
     Apply normalize → validate → within-import + cross-exam dedup. Returns
     a `{status -> count}` summary. Caller commits.
+
+    Dispatch:
+      * `file_type='xlsx'`  → legacy openpyxl streamer (needs column_mapping).
+      * Anything else       → `app.services.parsers` adapter selected via the
+                              detector at upload time.
     """
     imp = _get_import_or_raise(session, import_id)
-    if not imp.column_mapping:
-        raise ImportStateError("column_mapping not set; call save_mapping first")
     if not imp.target_exam_id:
         raise ImportStateError("target_exam_id missing")
     if not imp.file_path:
@@ -239,13 +272,17 @@ def parse_and_stage(
     seen_hashes: dict[str, int] = {}  # hash -> earlier row_number
     cross_exam_hashes = existing_question_hashes_for_exam(session, exam_id=imp.target_exam_id)
 
+    is_xlsx_family = (imp.file_type == "xlsx") or (imp.detected_format == "xlsx")
+    if is_xlsx_family:
+        if not imp.column_mapping:
+            raise ImportStateError("column_mapping not set; call save_mapping first")
+        row_iter = _xlsx_rows(imp, max_rows=settings.import_max_rows)
+    else:
+        row_iter = _adapter_rows(imp, max_rows=settings.import_max_rows)
+
     counts: dict[str, int] = {}
     parsed = 0
-    for parsed_row in stream_rows(
-        imp.file_path,
-        column_mapping=imp.column_mapping,
-        max_rows=settings.import_max_rows,
-    ):
+    for parsed_row in row_iter:
         parsed += 1
         normalized = normalize_row(parsed_row.raw)
         validation: ValidationResult = validate_row(normalized)
@@ -358,6 +395,18 @@ def confirm_import(
     imp = _get_import_or_raise(session, import_id)
     if not imp.target_exam_id:
         raise ImportStateError("target_exam_id missing")
+
+    # Guard: refuse to confirm an import with zero staged rows. Otherwise the
+    # import header gets stamped 'ready_to_publish' with no actual data — see
+    # Import #135 ghost-confirm post-mortem (2026-05-02).
+    items_total = (
+        session.scalar(select(func.count(ImportItem.id)).where(ImportItem.import_id == imp.id)) or 0
+    )
+    if items_total == 0:
+        raise ImportStateError(
+            "No rows were staged for this import. "
+            "Please complete the mapping step before confirming."
+        )
 
     items = list(
         session.scalars(
@@ -550,6 +599,45 @@ def _get_import_or_raise(session: Session, import_id: int) -> Import:
     if imp is None:
         raise ImportNotFoundError(f"import {import_id} not found")
     return imp
+
+
+# ---------------------------------------------------------------------------
+# Row stream helpers — XLSX (legacy) vs adapter (Milestone 1 multi-format)
+# ---------------------------------------------------------------------------
+
+
+def _xlsx_rows(imp: Import, *, max_rows: int):
+    """Stream rows from an XLSX import via the existing column-mapping pipeline."""
+    if imp.file_path is None:
+        raise ImportStateError("file_path missing for XLSX import")
+    yield from stream_rows(
+        imp.file_path,
+        column_mapping=imp.column_mapping or {},
+        max_rows=max_rows,
+    )
+
+
+def _adapter_rows(imp: Import, *, max_rows: int):
+    """Stream rows from a non-XLSX import via the parser-adapter detector.
+
+    Yields `ParsedRow` objects so the rest of `parse_and_stage` is dispatch-
+    agnostic. `sheet_name` is set to the adapter family so the preview UI
+    still has something to show; `row_number` is monotonically incremented
+    starting at 2 to mirror XLSX (row 1 = header).
+    """
+    file_path = Path(imp.file_path or "")
+    adapter = _detect_adapter(filename=imp.file_name, file_path=file_path)
+    if adapter is None:
+        raise ImportStateError(
+            f"no parser adapter could claim {imp.file_name!r} "
+            f"(detected_format={imp.detected_format!r}, file_type={imp.file_type!r})"
+        )
+    for seen, (idx, row) in enumerate(
+        enumerate(adapter.parse(file_path=file_path), start=2), start=1
+    ):
+        if seen > max_rows:
+            raise ValueError(f"too many data rows (>{max_rows})")
+        yield _ParsedRow(sheet_name=adapter.name, row_number=idx, raw=dict(row))
 
 
 def _sanitize_filename(name: str) -> str:
