@@ -78,6 +78,22 @@ The LXC runs the blog stack already; we **co-tenant** without disturbing it.
    `dist/`, `build/`, `.git/`, `*.log`.
 4. **Create DB role + database**: see DB Setup section below.
 5. **Install deps**: `cd /srv/exam-platform-dev && uv sync --extra dev`.
+   - **CRITICAL — venv ownership rule**: `uv sync` creates files owned by
+     whoever runs it. The systemd unit runs uvicorn as `User=exam-platform`,
+     so the venv must be readable by that user.
+   - **Preferred:** run `uv sync` as the service user
+     (`sudo -u exam-platform /root/.local/bin/uv sync` or equivalent).
+   - **If `uv sync` was run as root** (e.g. via SSH `root@lxc`), you MUST
+     run the recovery sequence before restarting the app:
+     ```bash
+     chown -R exam-platform:exam-platform /srv/exam-platform/.venv
+     find /srv/exam-platform/.venv -not -user exam-platform | wc -l   # must print 0
+     systemctl restart exam-platform-web.service
+     ```
+     Skipping this triggers `PermissionError` on first worker fork that
+     re-imports any newly-installed package. See
+     `plans/reports/phase-16a-260502-deploy-incident-note.md` for the
+     incident this rule prevents.
 6. **Apply migrations**: `uv run alembic upgrade head`.
 
 ## Database setup (Phase 02)
