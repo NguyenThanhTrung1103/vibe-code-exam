@@ -1,0 +1,106 @@
+{% extends "base.html" %}
+{% block title %}Admin · Question {{ question_id }} · Community{% endblock %}
+{% block content %}
+<style>
+  .tab-strip a { margin-right: 0.75rem; }
+  .tab-strip .active { font-weight: 600; }
+  .community-card { border: 1px solid #ddd; border-radius: 4px; padding: 0.75rem 1rem; margin-bottom: 1rem; }
+  .community-card section { padding: 0.5rem 0; border-top: 1px dashed #eee; }
+  .community-card section:first-of-type { border-top: 0; }
+  .community-card h3 { margin: 0 0 0.25rem; font-size: 1rem; }
+  .badge { display: inline-block; padding: 0.1rem 0.4rem; border-radius: 3px; background: #eee; font-size: 0.85rem; }
+  .badge.warn { background: #fde0a8; }
+  .badge.trust { background: #f6f6f6; color: #555; }
+  .vote-row { display: flex; align-items: center; gap: 0.5rem; margin: 0.15rem 0; font-size: 0.9rem; }
+  .vote-label { width: 2.5rem; font-weight: 600; }
+  .vote-bar { height: 0.6rem; background: #c9d4e6; border-radius: 2px; min-width: 1px; }
+  .vote-row.is-pick .vote-bar { background: #4a7fc1; }
+  .vote-row.is-pick .vote-label::after { content: " ★"; color: #4a7fc1; }
+  .vote-count { color: #555; font-size: 0.85rem; }
+  .meta-grid { display: grid; grid-template-columns: max-content 1fr; gap: 0.25rem 0.75rem; font-size: 0.9rem; }
+  .meta-grid dt { color: #666; }
+  .empty-state { padding: 1rem; background: #f7f7f7; border-radius: 4px; color: #555; }
+  .truncation-notice { font-size: 0.9rem; color: #666; margin-bottom: 0.75rem; }
+</style>
+
+<h1>Question #{{ question_id }} · Community</h1>
+<p>Exam: <strong>{{ exam_name or 'unknown' }}</strong>
+   {% if given_answer %}· Given answer: <code>{{ given_answer }}</code>{% endif %}
+</p>
+
+<nav class="tab-strip">
+  <a href="/admin/questions/{{ question_id }}/edit">Edit</a>|<a class="active" href="/admin/questions/{{ question_id }}/community">Community</a>
+</nav>
+
+<p><span class="badge trust">Community Signal — not authoritative</span></p>
+
+{% if not cards %}
+  <p class="empty-state">No community data for this question.</p>
+{% else %}
+  {% if truncated %}
+    <p class="truncation-notice">Showing first {{ max_rows }} of {{ total_cds }} sources.</p>
+  {% endif %}
+  {% for card in cards %}
+    <div class="community-card" id="cds-{{ card.id }}">
+      <h3>
+        <span class="badge">{{ card.source_name }}</span>
+        {% if card.answer_conflict %}<span class="badge warn">⚠ Conflict</span>{% endif %}
+      </h3>
+
+      {# § Answer #}
+      <section>
+        <strong>Answer</strong>
+        <div class="meta-grid">
+          <dt>Given:</dt><dd>{{ card.given_answer or '—' }}</dd>
+          <dt>Community:</dt><dd>{{ card.community_answer or '—' }}</dd>
+        </div>
+      </section>
+
+      {# § Community Insight #}
+      <section>
+        <strong>Community Insight</strong>
+        <div class="meta-grid">
+          <dt>Confidence:</dt><dd><span class="badge">{{ card.community_confidence }}</span></dd>
+          <dt>Consensus:</dt><dd><span class="badge">{{ card.community_consensus }}</span></dd>
+          <dt>Total votes:</dt><dd>{{ card.total_votes if card.total_votes is not none else '—' }}</dd>
+        </div>
+        {% if card.votes %}
+          <div style="margin-top: 0.5rem;">
+            {% for item in card.votes %}
+              <div class="vote-row {% if item.is_pick %}is-pick{% endif %}">
+                <span class="vote-label">{{ item.label }}</span>
+                <div class="vote-bar" style="width: {{ item.percent }}%;"></div>
+                <span class="vote-count">{{ item.count }} ({{ item.percent }}%)</span>
+              </div>
+            {% endfor %}
+          </div>
+        {% else %}
+          <p><em>No vote data</em></p>
+        {% endif %}
+        {% if card.summary %}
+          <p style="margin-top: 0.5rem;"><strong>Summary:</strong> {{ card.summary }}</p>
+        {% endif %}
+      </section>
+
+      {# § Metadata #}
+      <section>
+        <strong>Metadata</strong>
+        <div class="meta-grid">
+          <dt>Source URL:</dt>
+          <dd>
+            {% if card.source_url %}
+              <a href="{{ card.source_url }}" rel="noopener noreferrer nofollow" target="_blank">{{ card.source_url }}</a>
+            {% else %}—{% endif %}
+          </dd>
+          <dt>External ID:</dt><dd>{{ card.external_question_id or '—' }}</dd>
+          <dt>Fetch status:</dt><dd><span class="badge">{{ card.fetch_status }}</span></dd>
+          <dt>Discussion count:</dt><dd>{{ card.discussion_count if card.discussion_count is not none else '—' }}</dd>
+          <dt>Created:</dt><dd>{{ card.created_at.isoformat() if card.created_at else '—' }}</dd>
+        </div>
+      </section>
+    </div>
+  {% endfor %}
+{% endif %}
+
+<p style="margin-top: 1.5rem;"><a href="/admin/questions/{{ question_id }}/edit">← Back to edit</a></p>
+{% endblock %}

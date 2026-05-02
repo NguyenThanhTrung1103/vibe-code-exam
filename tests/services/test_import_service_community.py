@@ -482,23 +482,30 @@ def test_no_internet_fetch_imports_in_import_service_or_community_helpers() -> N
             )
 
 
-def test_no_student_facing_routes_modified() -> None:
-    """The Phase 13 surface lives entirely under app/services + app/audit +
-    app/models + app/schemas + app/security. No student route changes.
+def test_no_student_facing_routes_reference_community_model() -> None:
+    """No STUDENT-facing route may reference CDS. Admin routes are allowed
+    (Phase 16a admin community tab) — only `app/routers/public/` and
+    sibling student modules are forbidden from touching the model.
     """
     from pathlib import Path
 
     repo = Path(__file__).resolve().parents[2]
-    student_routes_dir = repo / "app" / "routers"
-    if not student_routes_dir.exists():
+    routers_dir = repo / "app" / "routers"
+    if not routers_dir.exists():
         return  # nothing to check
-    # Best we can do hermetically: confirm no router file references the
-    # community models, since routes that use them would have to import.
-    for f in student_routes_dir.rglob("*.py"):
+    forbidden_dirs = ("public",)
+    forbidden_modules = ("attempts.py", "practice.py", "reports.py")
+    for f in routers_dir.rglob("*.py"):
+        rel = f.relative_to(routers_dir)
+        is_forbidden = any(part in forbidden_dirs for part in rel.parts) or rel.name in (
+            forbidden_modules
+        )
+        if not is_forbidden:
+            continue
         text = f.read_text(encoding="utf-8")
         assert "community_discussion_sources" not in text, (
-            f"{f} references CDS table — Phase 16a not in scope yet."
+            f"{f} references CDS table — student routes must NOT touch community signal."
         )
         assert "CommunityDiscussionSource" not in text, (
-            f"{f} imports CDS model — Phase 16a not in scope yet."
+            f"{f} imports CDS model — student routes must NOT touch community signal."
         )

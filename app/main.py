@@ -18,6 +18,7 @@ from app.middleware import RequestIdMiddleware
 from app.paths import STATIC_DIR, TEMPLATES_DIR
 from app.routers import attempts, auth, health, practice, reports
 from app.routers.admin import audit as admin_audit
+from app.routers.admin import community_sources as admin_community_sources
 from app.routers.admin import courses as admin_courses
 from app.routers.admin import exams as admin_exams
 from app.routers.admin import imports as admin_imports
@@ -104,6 +105,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(admin_topics.router)
     app.include_router(admin_imports.router)
     app.include_router(admin_questions.router)
+    app.include_router(admin_community_sources.router)
     app.include_router(admin_question_reports.router)
     app.include_router(practice.router)
     app.include_router(attempts.router)

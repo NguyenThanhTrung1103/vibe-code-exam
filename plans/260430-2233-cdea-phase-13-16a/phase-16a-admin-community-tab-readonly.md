@@ -1,13 +1,21 @@
 ---
-title: Phase 16a — Admin Community Tab (read-only) + Ignore Action
-status: pending
+title: Phase 16a — Admin Community Tab (read-only)
+status: in_progress (Sprint-1-lite, read-only — 2026-05-02)
 priority: high (Sprint-1 ship target)
-effort: 1–3 working days (incl. 30% buffer)
-depends_on: phase-13-discussion-url-parser.md (schema migration applied)
+effort: ~2.5 hours (refined scope; see refined plan)
+depends_on: phase-13-discussion-url-parser.md (schema migration applied — DONE 2026-05-02 08:52)
 parallel_ok: from day 2 of Phase 13 using fixture data
+refined_plan: ../../reports/phase-16a-260502-0903-readonly-refined-plan.md
 ---
 
-# Phase 16a — Admin Community Tab (read-only) + Ignore
+> **2026-05-02 scope reduction**: This plan originally included an "Ignore"
+> mutation, a review-queue route, audit emissions, HTMX swaps, and CSRF
+> protection. The implementation taken on 2026-05-02 is a strict read-only
+> tab only — no Ignore action, no review queue, no audit emissions.
+> The dropped features are deferred to Phase 16b. Refined plan:
+> [`../../reports/phase-16a-260502-0903-readonly-refined-plan.md`](../../reports/phase-16a-260502-0903-readonly-refined-plan.md).
+
+# Phase 16a — Admin Community Tab (read-only)
 
 ## Context links
 - Plan overview: [`plan.md`](plan.md)

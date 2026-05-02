@@ -7,6 +7,10 @@
    {% if q.retired_at %}<span class="badge badge-soon">RETIRED at {{ q.retired_at.isoformat() }}</span>{% endif %}
 </p>
 
+<nav class="tab-strip" style="margin: 0.5rem 0 1rem;">
+  <a href="/admin/questions/{{ q.id }}/edit" style="font-weight: 600; margin-right: 0.75rem;">Edit</a>|<a href="/admin/questions/{{ q.id }}/community" style="margin-left: 0.75rem;">Community</a>
+</nav>
+
 <section>
   <h2>Text · type · topic · difficulty · status</h2>
   <form method="post" action="/admin/questions/{{ q.id }}/edit">
