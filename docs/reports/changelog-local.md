@@ -148,6 +148,36 @@ Reverse-chronological log of significant changes that exist on the local working
 
 **XLSX row-count clarification (40 vs 41):** the workbook has `max_row=42` (1 header + 41 data rows). `excel_parser.stream_rows` skips fully-blank rows (`if all(c is None or empty: continue`) — 1 row in the fixture is fully empty, leaving 40 staged. Same skip behaviour since Phase 05; not a parser bug, no code change.
 
+### Re-deploy after commit — 2026-05-02 10:42 UTC
+
+**Commit:** `a830556` — `feat(imports): support multi-format dump import (Milestone 1)`. Pushed range `a2a3d02..a830556` (3 commits, includes 2 prior local-only commits) → `origin/master`.
+
+**Procedure (alias `exam-lxc`, key `~/.ssh/id_ed25519_exam_lxc`):**
+1. Source-tree snapshot for rollback: `/var/backups/exam-platform/pre-redeploy-20260502T104554Z.tar.gz` (12M).
+2. tar+scp committed source (11M) → extract over `/srv/exam-platform/`.
+3. `uv sync --extra dev` → no new packages, only the local `exam-platform` wheel rebuilt.
+4. `chown -R exam-platform:exam-platform /srv/exam-platform/.venv`.
+5. `alembic current` before: `e4f5a6b7c8d9 (head)`. `upgrade head` → no-op. `current` after: `e4f5a6b7c8d9 (head)`. **No DB backup needed** (no migration delta since prior deploy).
+6. `systemctl restart exam-platform-web.service` only — `is-active = active`.
+
+**Post-deploy smoke (live HTTP):**
+- `/healthz` loopback: `{"status":"ok","db":"ok","redis":"ok"}`
+- `/healthz` LAN 8001: `{"status":"ok","db":"ok","redis":"ok"}`
+- Anon `/admin/imports` (Accept: text/html): `HTTP/1.1 303 See Other`
+- Anon `/admin/questions?source_import_id=137` (Accept: text/html): `HTTP/1.1 303 See Other`
+- Upload template on disk: `accept=".xlsx,.html,.htm,.pdf,.txt"`
+- Recent-imports table contains `<th>Format</th>` column.
+
+**Post-deploy DB verification (imports preserved):**
+
+| import_id | file_type | detected_format | status | imported | qid range | CDS | Explanations |
+|---|---|---|---|---|---|---|---|
+| 137 | xlsx | xlsx | ready_to_publish | 37 | 998–1034 | 0 | 0 |
+| 138 | html | examtopics_html | ready_to_publish | 57 | 1035–1091 | 57 | 0 |
+| 139 | pdf | qblock_pdf | ready_to_publish | 164 | 1092–1255 | 0 | 164 |
+
+All 3 imports + 258 questions + 1066 options + 164 explanations + 57 community sources present and unchanged after redeploy. **No DELETE/UPDATE on existing rows.**
+
 ### Fixture smoke #2 — HTML (57q ExamTopics) — 2026-05-02 10:29 UTC
 
 | Metric | Value |
