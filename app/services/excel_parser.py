@@ -17,6 +17,9 @@ from typing import Any
 from openpyxl import load_workbook
 
 # Canonical fields the rest of the pipeline understands.
+# Phase 13 (CDEA Sprint-1) added: discussion_url, external_question_id,
+# discussion_count, vote_a..vote_f. All optional — existing imports without
+# any community columns continue to work unchanged.
 CANONICAL_FIELDS = (
     "question_text",
     "question_type",
@@ -31,6 +34,16 @@ CANONICAL_FIELDS = (
     "explanation",
     "reference",
     "tags",
+    # --- Phase 13 community-signal columns (all optional) ---
+    "discussion_url",
+    "external_question_id",
+    "discussion_count",
+    "vote_a",
+    "vote_b",
+    "vote_c",
+    "vote_d",
+    "vote_e",
+    "vote_f",
 )
 REQUIRED_FIELDS = ("question_text", "option_a", "option_b", "correct_answer")
 MAX_COLUMNS = 32  # safety cap — too-wide sheet → reject.
@@ -66,6 +79,20 @@ _ALIAS = {
     "url": "reference",
     "ref": "reference",
     "tags": "tags",
+    # --- Phase 13 community-signal aliases ---
+    "discussionurl": "discussion_url",
+    "discussion": "discussion_url",
+    "externalquestionid": "external_question_id",
+    "extquestionid": "external_question_id",
+    "extqid": "external_question_id",
+    "discussioncount": "discussion_count",
+    "comments": "discussion_count",
+    "votea": "vote_a",
+    "voteb": "vote_b",
+    "votec": "vote_c",
+    "voted": "vote_d",
+    "votee": "vote_e",
+    "votef": "vote_f",
 }
 
 

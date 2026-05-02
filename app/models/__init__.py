@@ -11,6 +11,13 @@ from app.models.attempts import Attempt, AttemptAnswer
 from app.models.audit import AuditLog
 from app.models.base import Base, SoftDeleteMixin, TimestampMixin
 from app.models.catalog import Course, Exam, ProductVersion, Provider, Topic
+from app.models.community import (
+    CommunityConfidence,
+    CommunityConsensus,
+    CommunityDiscussionSource,
+    CommunityFetchStatus,
+    CommunitySourceName,
+)
 from app.models.evidence import EvidenceFetchLog, QuestionReference, SourceDomain
 from app.models.glossary import GlossaryTerm
 from app.models.imports import Import, ImportItem
@@ -29,6 +36,11 @@ __all__ = [
     "AttemptAnswer",
     "AuditLog",
     "Base",
+    "CommunityConfidence",
+    "CommunityConsensus",
+    "CommunityDiscussionSource",
+    "CommunityFetchStatus",
+    "CommunitySourceName",
     "Course",
     "EvidenceFetchLog",
     "Exam",

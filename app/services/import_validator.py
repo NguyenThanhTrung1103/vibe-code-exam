@@ -2,6 +2,12 @@
 
 Returns a `ValidationResult` per row. Caller persists it onto the
 matching `import_items` row.
+
+Phase 13 extension: optional community-signal columns (`discussion_url`,
+`external_question_id`, `discussion_count`, `vote_a..vote_f`) are accepted
+when present and surfaced under `canonical['community']`. Invalid community
+data degrades to a row-level warning (not error) and is dropped — the
+core question import still proceeds.
 """
 
 from __future__ import annotations
@@ -10,6 +16,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from app.models.enums import ImportItemStatus
+from app.services.import_community import extract_community_payload
 
 ALLOWED_DIFFICULTY = {"easy", "medium", "hard"}
 ALLOWED_QTYPE = {"single", "multiple", "true_false"}
@@ -51,7 +58,11 @@ def validate_row(normalized: dict[str, Any]) -> ValidationResult:
         )
         difficulty = "medium"
 
-    canonical = {
+    # Phase 13 — optional community signal. Mutates `warnings` in place;
+    # bad URL / bad votes downgrade the row to warning but never to error.
+    community = extract_community_payload(normalized, warnings=warnings)
+
+    canonical: dict[str, Any] = {
         "question_text": q,
         "question_type": qtype,
         "difficulty": difficulty,
@@ -62,6 +73,8 @@ def validate_row(normalized: dict[str, Any]) -> ValidationResult:
         "reference": normalized.get("reference"),
         "tags": normalized.get("tags"),
     }
+    if community is not None:
+        canonical["community"] = community
 
     if errors:
         return ValidationResult(

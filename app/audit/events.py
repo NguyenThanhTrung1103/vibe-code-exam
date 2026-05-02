@@ -65,3 +65,11 @@ class AuditAction(enum.StrEnum):
     QUESTION_REPORT_FILED = "question_report.filed"
     QUESTION_REPORT_RESOLVED = "question_report.resolved"
     QUESTION_REPORT_REJECTED = "question_report.rejected"
+
+    # Phase 13 — community signal (CDEA Sprint-1)
+    # System-actor events emitted by the import pipeline when a community
+    # discussion source is staged from an admin dump. NO Internet fetch
+    # happens here — that's Phase 14.
+    COMMUNITY_SOURCE_CANDIDATE_CREATED = "community_source.candidate_created"
+    COMMUNITY_SOURCE_RELINKED = "community_source.relinked"
+    COMMUNITY_SOURCE_RELINKED_TEXT_CHANGED = "community_source.relinked_text_changed"

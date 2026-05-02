@@ -65,6 +65,7 @@ from app.services.excel_parser import (
     read_headers,
     stream_rows,
 )
+from app.services.import_community import upsert_community_source
 from app.services.import_dedup import content_hash, existing_question_hashes_for_exam
 from app.services.import_normalizer import normalize_row
 from app.services.import_validator import OPTION_LABELS, ValidationResult, validate_row
@@ -515,6 +516,21 @@ def _create_question_from_item(
         },
         request_id=request_id,
     )
+
+    # Phase 13 — community discussion source candidate (CDEA Sprint-1).
+    # The validator stuck a JSONB-safe community payload onto canonical
+    # when the row had any community columns. We upsert the CDS row in
+    # the SAME transaction as the question + audit log; commit happens
+    # at the caller (savepoint scope of `confirm_import`).
+    community_payload = canonical.get("community")
+    if community_payload:
+        upsert_community_source(
+            session,
+            question_id=question.id,
+            payload=community_payload,
+            request_id=request_id,
+        )
+
     # Default visibility/publish_status
     # Phase 02 model already uses defaults Visibility.private + ExamPublishStatus.draft
     # for `exams`. Questions have no visibility/publish_status columns; they
