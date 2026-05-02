@@ -40,9 +40,9 @@ def main() -> int:
 
     pw = args.password or os.environ.get("EXAM_ADMIN_PW")
     if not pw:
-        pw = getpass.getpass("Admin password (≥12 chars): ")
-    if len(pw) < 12:
-        print("ERROR: password must be at least 12 characters.", file=sys.stderr)
+        pw = getpass.getpass("Admin password (≥10 chars): ")
+    if len(pw) < 10:
+        print("ERROR: password must be at least 10 characters.", file=sys.stderr)
         return 2
 
     email = args.email.strip().lower()
