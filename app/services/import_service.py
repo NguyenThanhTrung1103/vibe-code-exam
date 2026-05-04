@@ -196,6 +196,34 @@ def detect_headers(
     return sheet, headers, auto_map(headers)
 
 
+def required_mapping_missing(column_mapping: dict[str, str | None]) -> list[str]:
+    """Return the list of missing required canonical fields for a mapping.
+
+    Pure function — no DB access. Encodes the contract enforced by
+    `save_mapping` and rendered by `admin/imports/mapping.html`:
+
+      * `question_text` must be mapped.
+      * `correct_answer` must be mapped.
+      * Either both `option_a` and `option_b` are mapped individually,
+        or `combined_options` is mapped (it is split into
+        `option_a..option_f` at parse time).
+
+    Empty list = mapping is valid. Used by tests to exercise the rule
+    without a database session.
+    """
+    mapped_fields = {v for v in column_mapping.values() if v}
+    has_options = "combined_options" in mapped_fields or (
+        "option_a" in mapped_fields and "option_b" in mapped_fields
+    )
+    missing: list[str] = []
+    for required_core in ("question_text", "correct_answer"):
+        if required_core not in mapped_fields:
+            missing.append(required_core)
+    if not has_options:
+        missing.append("option_a + option_b OR combined_options")
+    return missing
+
+
 def save_mapping(
     session: Session,
     *,
@@ -208,16 +236,7 @@ def save_mapping(
     # Reject mappings that don't cover all required canonical fields.
     # Either option_a+option_b OR combined_options satisfies the option
     # requirement — combined_options is split into option_a..f at parse time.
-    mapped_fields = {v for v in column_mapping.values() if v}
-    has_options = "combined_options" in mapped_fields or (
-        "option_a" in mapped_fields and "option_b" in mapped_fields
-    )
-    missing: list[str] = []
-    for required_core in ("question_text", "correct_answer"):
-        if required_core not in mapped_fields:
-            missing.append(required_core)
-    if not has_options:
-        missing.append("option_a + option_b OR combined_options")
+    missing = required_mapping_missing(column_mapping)
     if missing:
         raise UploadValidationError(f"mapping missing required fields: {missing}")
     # Validate every mapped value lands in the canonical set.
@@ -682,6 +701,7 @@ __all__ = [
     "create_import",
     "detect_headers",
     "parse_and_stage",
+    "required_mapping_missing",
     "save_mapping",
     "toggle_row",
 ]

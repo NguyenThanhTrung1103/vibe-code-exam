@@ -56,6 +56,15 @@ def test_excel_parser_canonical_fields_include_community() -> None:
 
 
 def test_excel_parser_auto_map_aliases_community_headers() -> None:
+    """Community-signal headers route to their canonical fields.
+
+    When the sheet carries both a specific `Discussion Count` column and a
+    generic `Comments` column, both used to map to `discussion_count`. After
+    the duplicate-canonical de-duplication added on 2026-05-04, only the
+    more specific header keeps the canonical assignment; the rival is
+    reset to `None` so the operator must pick manually if they really want
+    two columns feeding the same field.
+    """
     headers = [
         "Discussion URL",
         "External Question ID",
@@ -70,6 +79,21 @@ def test_excel_parser_auto_map_aliases_community_headers() -> None:
     assert m["Discussion Count"] == "discussion_count"
     assert m["Vote A"] == "vote_a"
     assert m["Vote F"] == "vote_f"
+    # `Comments` (alias `comments`) and `Discussion Count` (alias
+    # `discussioncount`) both target `discussion_count` — the longer alias
+    # wins; `Comments` is demoted to None.
+    assert m["Comments"] is None
+    # Verify no canonical was claimed twice.
+    canonicals = [v for v in m.values() if v]
+    assert len(canonicals) == len(set(canonicals)), m
+
+
+def test_excel_parser_auto_map_aliases_community_headers_solo_comments() -> None:
+    """A solo `Comments` column still claims `discussion_count`.
+
+    Demotion only fires when a more-specific rival is also present.
+    """
+    m = auto_map(["Comments"])
     assert m["Comments"] == "discussion_count"
 
 

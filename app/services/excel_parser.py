@@ -105,11 +105,18 @@ _ALIAS = {
     # --- Vietnamese / dump-style aliases (accent-stripped form) ---
     "cauhoi": "question_text",  # "Câu hỏi"
     "noidungcauhoi": "question_text",  # "Nội dung câu hỏi"
+    # `Loại câu hỏi` literally means "question type". Without this entry the
+    # `cauhoi` substring fallback would steal `question_text`.
+    "loaicauhoi": "question_type",  # "Loại câu hỏi"
     "cautraloidung": "correct_answer",  # "Câu trả lời đúng"
     "dapandung": "correct_answer",  # "Đáp án đúng"
-    "giaithichdapan": "explanation",  # "Giải thích đáp án"
+    "giaithichdapan": "explanation",  # "Giải thích đáp án" — canonical
     "giaithich": "explanation",  # "Giải thích"
-    "motathem": "explanation",  # "Mô tả thêm"
+    # "Mô tả thêm" used to alias to `explanation`, which collided with
+    # "Giải thích đáp án" on Vietnamese dumps that carry both columns. Route
+    # it to `reference` instead — its semantics ("additional notes") match
+    # `reference` better and removes the duplicate-canonical mapping.
+    "motathem": "reference",  # "Mô tả thêm"
     "chude": "topic",  # "Chủ đề"
     "linhvuc": "topic",  # "Lĩnh vực"
     "dokho": "difficulty",  # "Độ khó"
@@ -134,13 +141,23 @@ class ParsedRow:
 def auto_map(headers: list[str]) -> dict[str, str | None]:
     """Best-effort header → canonical mapping. Unknown headers map to None.
 
-    Lookup order:
+    Lookup order per header:
       1. Exact match on the normalized header form.
       2. Substring match against any registered alias key (longest-first), so
          long descriptive labels like "Đáp án đúng (ví dụ trả lời 1...)" still
          resolve to `correct_answer` via the embedded "dapandung" substring.
+
+    Duplicate-canonical de-duplication:
+      If two headers both resolve to the same canonical field, keep the more
+      specific match (exact alias wins over substring; longer alias key wins
+      over shorter), and drop the rival back to None. Vietnamese sheets that
+      carry both "Giải thích đáp án" and "Mô tả thêm" used to silently land
+      on `explanation` twice; this guarantees a single owner per canonical.
     """
     out: dict[str, str | None] = {}
+    # Specificity score per (header, canonical) so we can break ties later.
+    # Higher score = more specific match.
+    score: dict[str, int] = {}
     for h in headers:
         if not h:
             continue
@@ -148,17 +165,59 @@ def auto_map(headers: list[str]) -> dict[str, str | None]:
         if not key:
             out[h] = None
             continue
-        match = _ALIAS.get(key)
-        if match is None:
+        match: str | None = _ALIAS.get(key)
+        match_score = 0
+        if match is not None:
+            # Exact normalized match — strongest signal. Add the alias length
+            # so e.g. "giaithichdapan" beats "giaithich" if both ever map to
+            # the same canonical via different paths.
+            match_score = 1000 + len(key)
+        else:
             # Substring fallback only for aliases of length >= 4 — short aliases
             # ("a", "b", "q", "url"...) match too eagerly inside long words like
             # "random", "topic", "url" etc. Long Vietnamese alias keys
             # ("dapandung", "cauhoi", "danhsachdapan") still resolve.
-            for alias, canonical in _ALIAS_BY_LEN:
-                if len(alias) >= 4 and alias in key:
-                    match = canonical
-                    break
+            #
+            # Two-pass: prefer aliases that appear at position 0 of the
+            # header (the header *starts with* the alias) over aliases buried
+            # later. Without this, `Tags (Các đáp án ...)` would lose `tags`
+            # (pos 0, len 4) to `cacdapan` (pos 4, len 8) because the
+            # length-desc loop saw `cacdapan` first.
+            prefix_match: tuple[str, str] | None = None
+            inner_match: tuple[str, str] | None = None
+            for alias, candidate in _ALIAS_BY_LEN:
+                if len(alias) < 4:
+                    continue
+                pos = key.find(alias)
+                if pos < 0:
+                    continue
+                if pos == 0:
+                    if prefix_match is None:
+                        prefix_match = (alias, candidate)
+                elif inner_match is None:
+                    inner_match = (alias, candidate)
+            if prefix_match is not None:
+                alias, match = prefix_match
+                match_score = 500 + len(alias)
+            elif inner_match is not None:
+                alias, match = inner_match
+                match_score = len(alias)
         out[h] = match
+        score[h] = match_score
+
+    # Resolve duplicate canonicals by preferring the highest-scoring header
+    # for each canonical; reset losers to None so the operator can re-pick.
+    by_canonical: dict[str, str] = {}  # canonical → winning header
+    for h, owner_canonical in list(out.items()):
+        if not owner_canonical:
+            continue
+        winner = by_canonical.get(owner_canonical)
+        if winner is None or score.get(h, 0) > score.get(winner, 0):
+            if winner is not None:
+                out[winner] = None  # demote previous winner
+            by_canonical[owner_canonical] = h
+        else:
+            out[h] = None  # demote this header
     return out
 
 

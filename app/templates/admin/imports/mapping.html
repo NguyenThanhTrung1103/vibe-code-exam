@@ -28,6 +28,18 @@
       {% if f in ('option_a', 'option_b') and has_combined %}{# combined_options satisfies option_a + option_b after parse #}
       {% elif f not in mapped_fields %}{% set _ = missing_required.append(f) %}{% endif %}
     {% endfor %}
+
+    {# Detect headers that auto-mapped to the same canonical field. Dict-of-lists
+       so we can render a warning without dropping non-conflicting entries. #}
+    {% set canonical_owners = {} %}
+    {% for header, canonical in suggested.items() if canonical %}
+      {% set _ = canonical_owners.setdefault(canonical, []).append(header) %}
+    {% endfor %}
+    {% set duplicate_canonicals = [] %}
+    {% for canonical, owners in canonical_owners.items() if owners|length > 1 %}
+      {% set _ = duplicate_canonicals.append((canonical, owners)) %}
+    {% endfor %}
+
     {% if missing_required %}
       <div class="alert alert-warning" role="alert">
         <strong>Required mappings are missing.</strong>
@@ -36,8 +48,8 @@
       </div>
     {% elif has_combined %}
       <div class="alert alert-success" role="status">
-        <strong>Combined options column detected.</strong>
-        It will be split on <code class="code-chip">;</code>, <code class="code-chip">；</code>, or newlines into Option A..F at parse time.
+        <strong>Combined options column detected. It will be split into Option A..F during parsing.</strong>
+        Splits on <code class="code-chip">;</code>, <code class="code-chip">；</code>, or newlines. Separate <code class="code-chip">option_a</code> / <code class="code-chip">option_b</code> mappings are not required.
       </div>
     {% else %}
       <div class="alert alert-success" role="status">
@@ -45,12 +57,37 @@
       </div>
     {% endif %}
 
+    {% if duplicate_canonicals %}
+      <div class="alert alert-warning" role="alert">
+        <strong>Multiple columns mapped to the same canonical field.</strong>
+        Only one column per canonical field will be used; pick a single owner per row to avoid silent overwrites.
+        <ul class="muted">
+          {% for canonical, owners in duplicate_canonicals %}
+            <li>
+              <code class="code-chip">{{ canonical }}</code>:
+              {% for o in owners %}<code class="code-chip">{{ o }}</code>{% if not loop.last %}, {% endif %}{% endfor %}
+            </li>
+          {% endfor %}
+        </ul>
+      </div>
+    {% endif %}
+
     <p class="section-label">Required fields</p>
     <div class="mapping-status">
       {% for f in required_fields %}
-        <div class="mapping-pair{% if f not in mapped_fields %} missing{% endif %}">
+        {% set satisfied_by_combined = f in ('option_a', 'option_b') and has_combined %}
+        {% set is_missing = f not in mapped_fields and not satisfied_by_combined %}
+        <div class="mapping-pair{% if is_missing %} missing{% endif %}">
           <div class="canonical">{{ f }}<span class="required-mark">*</span></div>
-          <div class="header">{% if f in mapped_fields %}{{ mapped_fields[f] }}{% else %}— not mapped —{% endif %}</div>
+          <div class="header">
+            {% if f in mapped_fields %}
+              {{ mapped_fields[f] }}
+            {% elif satisfied_by_combined %}
+              <span class="muted">satisfied by <code class="code-chip">combined_options</code></span>
+            {% else %}
+              — not mapped —
+            {% endif %}
+          </div>
         </div>
       {% endfor %}
     </div>

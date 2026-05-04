@@ -13,6 +13,7 @@ from app.models.enums import ImportItemStatus
 from app.services import import_dedup
 from app.services.excel_parser import auto_map, read_headers, stream_rows
 from app.services.import_normalizer import normalize_row, normalize_text
+from app.services.import_service import required_mapping_missing
 from app.services.import_validator import validate_row
 
 # ---------------------------------------------------------------------------
@@ -256,3 +257,182 @@ def test_vietnamese_alias_map_routes_to_canonical_fields() -> None:
     # stripping — they may or may not exist as aliases. The contract we need
     # to defend is: question_text + correct_answer keep working.
     assert m["Đáp án đúng"] == "correct_answer"
+
+
+def test_vietnamese_dump_combined_options_and_explanation_no_collision() -> None:
+    """Vietnamese dump shape used by import #142 must auto-map cleanly.
+
+    Both "Giải thích đáp án" and "Mô tả thêm" used to land on `explanation`,
+    which silently dropped one column. After the fix, "Giải thích đáp án"
+    owns `explanation` and "Mô tả thêm" goes to `reference`.
+    """
+    headers = [
+        "Câu hỏi",
+        "Danh sách đáp án (ví dụ A. ...)",
+        "Đáp án đúng (ví dụ A)",
+        "Giải thích đáp án",
+        "Mô tả thêm",
+        "Tags",
+    ]
+    m = auto_map(headers)
+    assert m["Câu hỏi"] == "question_text"
+    assert m["Danh sách đáp án (ví dụ A. ...)"] == "combined_options"
+    assert m["Đáp án đúng (ví dụ A)"] == "correct_answer"
+    assert m["Giải thích đáp án"] == "explanation"
+    assert m["Mô tả thêm"] == "reference"
+    assert m["Tags"] == "tags"
+    # No two headers may resolve to the same canonical.
+    canonicals = [v for v in m.values() if v]
+    assert len(canonicals) == len(set(canonicals)), m
+
+
+def test_motathem_alias_routes_to_reference_not_explanation() -> None:
+    """Standalone alias check — `Mô tả thêm` is reference, not explanation."""
+    m = auto_map(["Mô tả thêm"])
+    assert m["Mô tả thêm"] == "reference"
+
+
+def test_loaicauhoi_does_not_steal_question_text() -> None:
+    """`Loại câu hỏi` must map to `question_type`, not `question_text`.
+
+    Without an explicit alias, the `cauhoi` substring fallback would match
+    inside `loaicauhoi` and steal `question_text` from the real question
+    column on import #142.
+    """
+    m = auto_map(["Loại câu hỏi", "Câu hỏi(Tiêu đề)"])
+    assert m["Loại câu hỏi"] == "question_type"
+    assert m["Câu hỏi(Tiêu đề)"] == "question_text"
+
+
+def test_tags_prefix_beats_buried_combined_options_substring() -> None:
+    """`Tags (Các đáp án ...)` must map to `tags`, not `combined_options`.
+
+    The header starts with `tags` (pos 0, len 4); a longer alias key
+    `cacdapan` (combined_options, len 8) appears mid-header. Position-0
+    matches must beat buried longer matches.
+    """
+    m = auto_map(["Tags (Các đáp án ngăn cách nhau bởi dấu chấm phẩy)"])
+    assert m["Tags (Các đáp án ngăn cách nhau bởi dấu chấm phẩy)"] == "tags"
+
+
+def test_import_142_full_fixture_shape_auto_map() -> None:
+    """End-to-end check on the exact header shape from import #142.
+
+    Locks in the contract for the canonical Vietnamese XLSX dump:
+    Loại câu hỏi → question_type
+    Câu hỏi(Tiêu đề) * → question_text
+    Mô tả thêm → reference
+    Tags (...) → tags
+    Danh sách đáp án (...) → combined_options
+    Đáp án đúng (...) → correct_answer
+    Giải thích đáp án → explanation
+    """
+    headers = [
+        "Loại câu hỏi",
+        "Câu hỏi(Tiêu đề) *",
+        "Mô tả thêm",
+        "Tags (Các đáp án ngăn cách nhau bởi dấu chấm phẩy)",
+        "Danh sách đáp án (Các đáp án ngăn cách nhau bởi dấu chấm phẩy) *",
+        "Đáp án đúng (ví dụ câu trả lời 1 là đáp án đúng thì điền 1, các đáp án ngăn cách bằng dấu chấm phẩy) *",
+        "Giải thích đáp án",
+    ]
+    m = auto_map(headers)
+    assert m["Loại câu hỏi"] == "question_type"
+    assert m["Câu hỏi(Tiêu đề) *"] == "question_text"
+    assert m["Mô tả thêm"] == "reference"
+    assert m["Tags (Các đáp án ngăn cách nhau bởi dấu chấm phẩy)"] == "tags"
+    assert (
+        m["Danh sách đáp án (Các đáp án ngăn cách nhau bởi dấu chấm phẩy) *"]
+        == "combined_options"
+    )
+    assert (
+        m[
+            "Đáp án đúng (ví dụ câu trả lời 1 là đáp án đúng thì điền 1, "
+            "các đáp án ngăn cách bằng dấu chấm phẩy) *"
+        ]
+        == "correct_answer"
+    )
+    assert m["Giải thích đáp án"] == "explanation"
+    canonicals = [v for v in m.values() if v]
+    assert len(canonicals) == len(set(canonicals)), m
+
+
+def test_giaithichdapan_wins_explanation_over_giaithich_only() -> None:
+    """When both `Giải thích đáp án` and `Giải thích` are present, the more
+    specific alias `giaithichdapan` keeps `explanation`; `Giải thích` alone
+    is demoted to None to avoid the duplicate-canonical collision.
+    """
+    m = auto_map(["Giải thích đáp án", "Giải thích"])
+    assert m["Giải thích đáp án"] == "explanation"
+    # `Giải thích` alone normalises to `giaithich` which exact-matches the
+    # alias too — but the longer key wins, so the rival is reset to None.
+    assert m["Giải thích"] is None
+
+
+def test_auto_map_drops_duplicate_canonicals() -> None:
+    """Two headers cannot silently auto-map to the same canonical field.
+
+    Synthetic case: a sheet with two `Question` columns. The first wins;
+    the second is reset to None so the operator must pick manually.
+    """
+    m = auto_map(["Question", "Question Text"])
+    canonicals = [v for v in m.values() if v]
+    assert canonicals.count("question_text") == 1, m
+
+
+# ---------------------------------------------------------------------------
+# save_mapping rule — combined_options satisfies option_a + option_b
+# ---------------------------------------------------------------------------
+
+
+def test_required_mapping_accepts_combined_options_without_option_a_b() -> None:
+    """The Vietnamese / dump-style mapping for import #142 must validate.
+
+    Required: question_text + correct_answer + combined_options
+    (no separate option_a / option_b).
+    """
+    missing = required_mapping_missing(
+        {
+            "Câu hỏi": "question_text",
+            "Đáp án đúng": "correct_answer",
+            "Danh sách đáp án": "combined_options",
+            "Giải thích đáp án": "explanation",
+        }
+    )
+    assert missing == []
+
+
+def test_required_mapping_accepts_explicit_option_a_b() -> None:
+    """Classic XLSX shape with discrete option_a / option_b columns."""
+    missing = required_mapping_missing(
+        {
+            "Question": "question_text",
+            "A": "option_a",
+            "B": "option_b",
+            "Correct": "correct_answer",
+        }
+    )
+    assert missing == []
+
+
+def test_required_mapping_rejects_when_neither_option_path_present() -> None:
+    """No option_a/b and no combined_options → mapping is invalid."""
+    missing = required_mapping_missing(
+        {
+            "Question": "question_text",
+            "Correct": "correct_answer",
+        }
+    )
+    assert "option_a + option_b OR combined_options" in missing
+
+
+def test_required_mapping_reports_question_text_missing() -> None:
+    """Missing question_text is reported alongside any other gaps."""
+    missing = required_mapping_missing(
+        {
+            "Correct": "correct_answer",
+            "Combined": "combined_options",
+        }
+    )
+    assert "question_text" in missing
+    assert "correct_answer" not in missing

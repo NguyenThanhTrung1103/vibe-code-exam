@@ -4,6 +4,86 @@ Reverse-chronological log of significant changes that exist on the local working
 
 ---
 
+## 2026-05-04 (late evening) — Vietnamese XLSX mapping fix (combined_options)
+
+**Status:** UI + alias-map + tests + docs. No schema migration. No
+parser semantics change. Goal: stop the mapping page from flagging
+`option_a` / `option_b` red when the operator has mapped a
+`combined_options` column instead.
+
+### Root cause
+
+The Required-fields display in `app/templates/admin/imports/mapping.html`
+applied a `mapping-pair missing` CSS class per canonical field
+strictly when that canonical didn't appear in `mapped_fields`,
+regardless of whether `combined_options` was mapped. The service-side
+rule in `import_service.save_mapping()` already accepted
+`combined_options` as a substitute for `option_a` + `option_b`, so the
+UI was the only place out of step. Operators could still save the
+mapping; the red flag was misleading and produced unfounded "missing
+required fields" anxiety.
+
+A second, related bug: `auto_map()` in
+`app/services/excel_parser.py` mapped both `Mô tả thêm` and
+`Giải thích đáp án` to `explanation`, causing whichever column was
+read second to silently overwrite the first when the parser folded the
+mapping into `raw`.
+
+### What changed
+
+- `app/services/excel_parser.py`:
+  - `_ALIAS["motathem"]` rerouted from `explanation` to `reference`.
+  - `auto_map()` now scores each match and de-duplicates: when two
+    headers resolve to the same canonical, the higher-scoring one
+    wins (exact match > substring; longer alias > shorter), and the
+    rival is reset to `None` so the operator must pick manually.
+- `app/templates/admin/imports/mapping.html`:
+  - Required-fields card no longer flags `option_a` / `option_b` red
+    when `combined_options` is mapped. Each shows
+    `satisfied by combined_options` instead of `— not mapped —`.
+  - Green banner copy clarifies "Combined options column detected.
+    It will be split into Option A..F during parsing.".
+  - New yellow warning when two headers auto-map to the same
+    canonical field, listing the conflicting headers.
+- `app/services/import_service.py`:
+  - Extracted `required_mapping_missing(column_mapping)` as a pure
+    helper so the rule (`question_text` + `correct_answer` +
+    (option_a/b OR combined_options)) can be tested hermetically.
+    `save_mapping()` now delegates to it.
+- `tests/test_import_unit.py`:
+  - Vietnamese fixture-shaped auto_map test (Câu hỏi /
+    Danh sách đáp án / Đáp án đúng / Giải thích đáp án / Mô tả thêm /
+    Tags) asserts the canonical assignments and that no canonical is
+    duplicated.
+  - `Mô tả thêm → reference`, `Giải thích đáp án → explanation` (and
+    `Giải thích` standalone is demoted to None when both are
+    present).
+  - `auto_map` drops duplicate canonicals (synthetic
+    `["Question", "Question Text"]` test).
+  - `required_mapping_missing()` accepts both shapes
+    (`option_a/b` or `combined_options`); rejects when neither;
+    flags `question_text` properly when missing.
+- `docs/ops/exam-platform-import-runbook.md`:
+  - New section "Vietnamese XLSX dumps with a combined answer list"
+    documenting the rule, the Vietnamese alias map, and the new
+    duplicate-canonical warning.
+
+### Strict boundaries respected
+
+- No cleanup SQL.
+- No DELETE / UPDATE of imports / questions.
+- No new real / large imports.
+- No internet fetch / scrape.
+- No nginx / cloudflared / Postgres / Redis config touched.
+- Only `exam-platform-web.service` is restarted on deploy.
+
+### Quality gates
+
+(filled in after local checks; see commit body for actual gate
+output.)
+
+---
+
 ## 2026-05-04 (evening) — Duplicate-import operator UX
 
 **Status:** UI / docs change only. No parser changes, no schema migration,

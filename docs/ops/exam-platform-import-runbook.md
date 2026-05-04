@@ -294,6 +294,42 @@ Edit `docs/reports/changelog-local.md` § "LXC deploy" with:
 ### 9. Do **not** run a real (non-fixture) import unless the operator
 explicitly approves. Stop here.
 
+## Vietnamese XLSX dumps with a combined answer list
+
+For Vietnamese Excel dumps with a combined answer list column, map it
+to `combined_options`. `option_a` and `option_b` are **not** required
+separately — the parser splits the combined cell on `;` / `；` /
+newline into `option_a..option_f` during the parse step.
+
+The mapping page on `/admin/imports/<id>/mapping` reflects this rule:
+when `combined_options` is mapped, the Required-fields card no longer
+flags `option_a` / `option_b` red and instead shows
+"satisfied by combined_options" against each. A green banner
+"Combined options column detected. It will be split into Option A..F
+during parsing." appears at the top of the card.
+
+A valid mapping is therefore:
+
+1. `question_text` is mapped, **and**
+2. `correct_answer` is mapped, **and**
+3. **either** `option_a` and `option_b` are mapped individually,
+   **or** `combined_options` is mapped.
+
+Vietnamese alias notes:
+
+* `Câu hỏi` → `question_text`
+* `Danh sách đáp án (...)` → `combined_options`
+* `Đáp án đúng (...)` → `correct_answer`
+* `Giải thích đáp án` → `explanation`
+* `Mô tả thêm` → `reference` (was `explanation`; the alias was changed
+  on 2026-05-04 to remove the silent collision with
+  `Giải thích đáp án`)
+* `Tags` → `tags`
+
+If two columns auto-map to the same canonical field, the mapping page
+now shows a yellow warning listing the conflicting headers; pick a
+single owner per canonical field to avoid silent overwrites.
+
 ## Common issues
 
 * **`detected_format` chip is blank** — the detector returned None. Either
