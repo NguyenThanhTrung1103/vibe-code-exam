@@ -307,3 +307,65 @@ explicitly approves. Stop here.
   parser produced zero canonical rows. Check the preview page for
   per-row errors; this is usually a fixture mismatch, not a service
   failure.
+
+## How to review a dump that was already imported / duplicate rows
+
+When you upload a dump and the preview page reports rows in the
+`duplicates` bucket, the questions almost certainly live in the bank
+already from a previous import. The wizard does **not** re-create them —
+that is by design (idempotent confirm). Use this flow to find and review
+the existing questions:
+
+1. Open `/admin/imports`. The **Recent imports** table at the bottom of
+   the page lists the latest 20 imports with their ID, dump title,
+   filename, detected format, and status.
+2. Locate the previous import for this dump by matching any of:
+   * **Title** — admin-supplied label entered at upload time.
+   * **Filename** — the original `.xlsx` / `.html` / `.pdf` / `.txt`.
+   * **Detected format** — `xlsx` / `examtopics_html` / `qblock_pdf` /
+     `qblock_text`.
+   * **Import ID** — if you already know it (e.g. from an earlier session
+     or the changelog).
+3. Click **Review questions** on that row. This opens
+   `/admin/questions?source_import_id=<id>` filtered to the live
+   questions imported by that dump. The page shows a context header
+   listing the import title, filename, detected format, and live count,
+   plus **Back to imports** and **Back to import #N** links.
+4. If the row shows **No imported questions** instead of the button,
+   that import never produced live questions (every row was staged but
+   none were confirmed, or all questions have been retired). Open the
+   import via **Open import** to check the per-row staging state.
+
+### Manual URLs for the current local imports
+
+The seed/sync done on 2026-05-02 produced three imports whose live
+questions are reachable at:
+
+```
+/admin/questions?source_import_id=137   # 37 questions  (XLSX)
+/admin/questions?source_import_id=138   # 57 questions  (saved HTML)
+/admin/questions?source_import_id=139   # 164 questions (PDF, qblock)
+```
+
+Bookmark these for the canonical review entry-points.
+
+### When the exact previous import cannot be determined
+
+The dedup step matches duplicates by **content hash**, not by import id,
+so the preview page does not know which earlier import a duplicate row
+came from. The duplicate banner therefore points you at:
+
+* the search-by-title / filename / format flow on `/admin/imports`, and
+* the per-exam fallback `/admin/questions?exam_id=<id>` for the target
+  exam, which lists every question regardless of source import.
+
+If the duplicate set spans multiple previous imports, expect to follow
+both links.
+
+### What this flow does **not** do
+
+* No DELETE / UPDATE / re-import. The duplicate banner is read-only
+  navigation, not a destructive action.
+* No cleanup SQL. Deduping pre-existing questions is a separate runbook
+  (`plans/reports/gate-a1-260502-cleanup.sql`) and is gated on operator
+  approval.

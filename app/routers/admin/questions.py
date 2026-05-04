@@ -19,13 +19,14 @@ import contextlib
 from fastapi import APIRouter, Form, HTTPException, Request, status
 from fastapi.responses import HTMLResponse
 from pydantic import ValidationError
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from app.auth.permissions import RequireAdmin
 from app.deps import SessionDep
 from app.middleware import REQUEST_ID_HEADER
 from app.models.catalog import Course, Exam, Provider, Topic
 from app.models.enums import QuestionDifficulty, QuestionStatus, QuestionType
+from app.models.imports import Import
 from app.models.questions import Question, QuestionExplanation, QuestionOption
 from app.routers.admin._common import (
     flash_error,
@@ -86,6 +87,19 @@ def list_questions(request: Request, user: RequireAdmin, session: SessionDep) ->
     stmt = stmt.order_by(Question.id.desc()).offset((page - 1) * page_size).limit(page_size)
     rows = session.execute(stmt).all()
 
+    # Resolve a single Import row when filtering by source_import_id so the
+    # template can render a context header (file/title/detected_format) and
+    # a back-link to the originating import. Falls through to None when the
+    # id doesn't resolve (deleted import, malformed query string, …).
+    source_import = session.get(Import, source_import_id) if source_import_id else None
+    source_import_total = None
+    if source_import is not None:
+        source_import_total = session.scalar(
+            select(func.count(Question.id))
+            .where(Question.source_import_id == source_import.id)
+            .where(Question.deleted_at.is_(None))
+        )
+
     exams = session.scalars(select(Exam).where(Exam.deleted_at.is_(None)).order_by(Exam.name)).all()
     return render_with_csrf(
         request,
@@ -95,6 +109,8 @@ def list_questions(request: Request, user: RequireAdmin, session: SessionDep) ->
             "rows": rows,
             "exams": exams,
             "page": page,
+            "source_import": source_import,
+            "source_import_total": source_import_total,
             "filters": {
                 "exam_id": exam_id or "",
                 "topic_id": topic_id or "",

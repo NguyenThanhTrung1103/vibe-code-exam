@@ -15,7 +15,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile, status
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from pydantic import ValidationError
-from sqlalchemy import select, text
+from sqlalchemy import func, select, text
 
 from app.auth.permissions import RequireAdmin
 from app.deps import SessionDep
@@ -23,6 +23,7 @@ from app.middleware import REQUEST_ID_HEADER
 from app.models.catalog import Course, Exam, Provider
 from app.models.enums import ImportItemStatus
 from app.models.imports import Import, ImportItem
+from app.models.questions import Question
 from app.routers.admin._common import (
     flash_error,
     render_with_csrf,
@@ -74,6 +75,23 @@ _ALL_CANONICAL_FIELDS: tuple[str, ...] = _REQUIRED_FIELDS + _COMMUNITY_FIELDS + 
 # ---------------------------------------------------------------------------
 
 
+def _imported_question_counts(session: object, import_ids: list[int]) -> dict[int, int]:
+    """Return live count of non-deleted questions per source_import_id.
+
+    Drives the 'Review questions' / 'No imported questions' affordance in the
+    Recent imports table. Empty input → empty dict (one fewer round-trip).
+    """
+    if not import_ids:
+        return {}
+    rows = session.execute(  # type: ignore[attr-defined]
+        select(Question.source_import_id, func.count(Question.id))
+        .where(Question.source_import_id.in_(import_ids))
+        .where(Question.deleted_at.is_(None))
+        .group_by(Question.source_import_id)
+    ).all()
+    return {sid: cnt for sid, cnt in rows if sid is not None}
+
+
 @router.get("", response_class=HTMLResponse)
 def upload_page(request: Request, user: RequireAdmin, session: SessionDep) -> HTMLResponse:
     exams = session.execute(
@@ -84,10 +102,17 @@ def upload_page(request: Request, user: RequireAdmin, session: SessionDep) -> HT
         .order_by(Provider.name, Course.name, Exam.name)
     ).all()
     recent = list(session.scalars(select(Import).order_by(Import.id.desc()).limit(20)))
+    imported_counts = _imported_question_counts(session, [r.id for r in recent])
     return render_with_csrf(
         request,
         "admin/imports/upload.html",
-        {"current_user": user, "exams": exams, "recent": recent, "error": None},
+        {
+            "current_user": user,
+            "exams": exams,
+            "recent": recent,
+            "imported_counts": imported_counts,
+            "error": None,
+        },
     )
 
 
@@ -103,10 +128,17 @@ def _render_upload_with_error(
         .order_by(Provider.name, Course.name, Exam.name)
     ).all()
     recent = list(session.scalars(select(Import).order_by(Import.id.desc()).limit(20)))  # type: ignore[attr-defined]
+    imported_counts = _imported_question_counts(session, [r.id for r in recent])
     return render_with_csrf(
         request,
         "admin/imports/upload.html",
-        {"current_user": user, "exams": exams, "recent": recent, "error": message},
+        {
+            "current_user": user,
+            "exams": exams,
+            "recent": recent,
+            "imported_counts": imported_counts,
+            "error": message,
+        },
     )
 
 
@@ -348,8 +380,6 @@ def preview_page(
     items = list(session.scalars(stmt))
 
     # Counts per status — single GROUP BY query.
-    from sqlalchemy import func
-
     counts_rows = session.execute(
         select(ImportItem.status, func.count(ImportItem.id))
         .where(ImportItem.import_id == imp.id)
@@ -443,8 +473,6 @@ def done(
     imp = session.get(Import, import_id)
     if imp is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
-    from sqlalchemy import func
-
     counts_rows = session.execute(
         select(ImportItem.status, func.count(ImportItem.id))
         .where(ImportItem.import_id == imp.id)

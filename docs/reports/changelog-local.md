@@ -4,6 +4,75 @@ Reverse-chronological log of significant changes that exist on the local working
 
 ---
 
+## 2026-05-04 (evening) — Duplicate-import operator UX
+
+**Status:** UI / docs change only. No parser changes, no schema migration,
+no destructive SQL. Goal: make the "uploaded a dump that was already
+imported" workflow legible to the operator.
+
+### What changed
+
+- `app/templates/admin/imports/upload.html` — Recent imports table now
+  carries an explicit **Imported** count column and per-row
+  **Review questions** link to
+  `/admin/questions?source_import_id=<id>`. Rows with zero live
+  questions show a muted **No imported questions** label instead of
+  the link. Added an info banner above the table that explains what
+  to do when an upload reports duplicates (search by title /
+  filename / format / id, then click Review questions).
+- `app/templates/admin/imports/preview.html` — when staged rows
+  include `duplicate` items, render a new info banner below the
+  status banner: count of duplicates, hint to use Recent imports →
+  Review questions, fallback link to per-exam questions list, and a
+  shortcut to filter the preview to `?filter=duplicates`. The banner
+  also explicitly notes that the dedup step can't auto-resolve which
+  prior import a duplicate row came from.
+- `app/templates/admin/questions/list.html` — when the request
+  carries `source_import_id`, render a context header at the top of
+  the page showing import id / title / filename / detected_format /
+  live count, plus Back-to-imports, Back-to-import-#N, and
+  Clear-import-filter links. When the id does not resolve to an
+  Import row (deleted import, malformed query string), show a
+  warning banner instead.
+- `app/routers/admin/imports.py` — `_imported_question_counts()`
+  helper computes live `questions.id` count per recent
+  `source_import_id` in a single GROUP BY query, passed to the
+  upload template so the Review-questions link only shows for rows
+  with imported questions. Also folded two duplicate inner
+  `from sqlalchemy import func` imports into the module-level import.
+- `app/routers/admin/questions.py` — list route now resolves the
+  `source_import_id` query param to an `Import` row (or None), plus
+  the live count of non-deleted questions linked to that import.
+  Both fields are passed to the template for the new context header.
+- `docs/ops/exam-platform-import-runbook.md` — new section
+  "How to review a dump that was already imported / duplicate rows"
+  with the canonical URLs for imports #137 / #138 / #139 and a
+  clear non-destructive scope statement.
+
+### URLs operators should bookmark
+
+```
+/admin/questions?source_import_id=137   # 37  questions (XLSX)
+/admin/questions?source_import_id=138   # 57  questions (HTML)
+/admin/questions?source_import_id=139   # 164 questions (PDF)
+```
+
+### Strict boundaries respected
+
+- No cleanup SQL.
+- No `DELETE` / `UPDATE` of imported questions or imports.
+- No new real imports performed.
+- No internet fetch / scrape.
+- No `nginx` / `cloudflared` / Postgres / Redis config touched.
+- Only `exam-platform-web.service` would be restarted on deploy.
+
+### Quality gates
+
+(filled in after local checks; see follow-up commit body for actual
+gate output.)
+
+---
+
 ## 2026-05-02 (afternoon) — Milestone 1 wiring closeout — READY FOR DEPLOY
 
 **Status:** All 3 sample dump formats now pass acceptance criteria from `Desktop\new 7.txt`. Code complete. Tests green. Local migration is *not* runnable (no Postgres on this Windows box) but the migration files compile, the chain is linear, and `alembic heads = e4f5a6b7c8d9`. **Not committed. Not pushed. LXC deploy gated on operator approval.**

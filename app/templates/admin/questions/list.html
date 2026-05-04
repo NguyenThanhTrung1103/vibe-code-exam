@@ -5,6 +5,31 @@
 
 <input type="hidden" name="csrf_token" id="page-csrf" value="{{ csrf_token }}">
 
+{% if source_import %}
+  <section class="alert alert-info" role="note" style="margin-bottom: 12px;">
+    <strong>Questions from import #{{ source_import.id }}{% if source_import.title %} — {{ source_import.title }}{% endif %}</strong>
+    <br>
+    <span class="muted">
+      File <code class="code-chip">{{ source_import.file_name }}</code>
+      · format
+      {% if source_import.detected_format %}<code class="code-chip">{{ source_import.detected_format }}</code>{% else %}—{% endif %}
+      · status <span class="exam-status status-{{ source_import.status.value }}">{{ source_import.status.value }}</span>
+      · {{ source_import_total if source_import_total is not none else 0 }} live question{{ '' if source_import_total == 1 else 's' }} linked to this import
+    </span>
+    <br>
+    <a class="btn" href="/admin/imports">Back to imports</a>
+    <a class="btn" href="/admin/imports/{{ source_import.id }}/preview">Back to import #{{ source_import.id }}</a>
+    <a class="btn" href="/admin/questions">Clear import filter</a>
+  </section>
+{% elif filters.source_import_id %}
+  <section class="alert alert-warning" role="alert" style="margin-bottom: 12px;">
+    <strong>Filtering by source_import_id={{ filters.source_import_id }}</strong>
+    — that import row could not be found (it may have been deleted).
+    <a href="/admin/imports">Back to imports</a> ·
+    <a href="/admin/questions">Clear filter</a>.
+  </section>
+{% endif %}
+
 <form method="get" action="/admin/questions" class="catalog-create">
   <label>Exam
     <select name="exam_id">

@@ -59,6 +59,34 @@
       <div class="alert alert-success" role="status"><strong>Looks safe to confirm.</strong> No errors detected.</div>
     {% endif %}
 
+    {% if dup_count > 0 %}
+      <div class="alert alert-info" role="note">
+        <strong>
+          {{ dup_count }} row{{ '' if dup_count == 1 else 's' }}
+          {{ 'is' if dup_count == 1 else 'are' }} duplicates of questions already imported.
+        </strong>
+        To review the existing questions, open
+        <a href="/admin/imports">Recent imports</a> and click
+        <strong>Review questions</strong> on the previous dump
+        (search by title <em>{{ imp.title or imp.file_name }}</em>, file name
+        <code class="code-chip">{{ imp.file_name }}</code>, or format
+        {% if imp.detected_format %}<code class="code-chip">{{ imp.detected_format }}</code>{% else %}—{% endif %}).
+        Previously imported questions for this exam can also be opened via
+        {% if target_exam %}
+          <a href="/admin/questions?exam_id={{ target_exam.id }}">all questions for {{ target_exam.name }}</a>.
+        {% else %}
+          <a href="/admin/questions">the question bank</a>.
+        {% endif %}
+        <br>
+        <span class="muted">
+          Filter to duplicate rows here:
+          <a href="?filter=duplicates">duplicates ({{ dup_count }})</a>.
+          The exact previous import cannot be auto-determined from the dedup
+          step — use title / file name / format above to locate it.
+        </span>
+      </div>
+    {% endif %}
+
     <input type="hidden" name="csrf_token" id="page-csrf" value="{{ csrf_token }}" />
 
     <p class="section-label">Filter</p>

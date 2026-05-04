@@ -74,11 +74,26 @@
       <h2 class="card-title">Recent imports</h2>
       <span class="card-meta">Latest 20</span>
     </header>
+
+    <div class="alert alert-info" role="note">
+      <strong>Saw "duplicate rows" on a fresh upload?</strong>
+      The questions are likely already in the bank from a previous import.
+      Find that previous import in the table below by <em>title</em>, <em>filename</em>,
+      <em>format</em>, or <em>ID</em>, then click <strong>Review questions</strong>
+      to open <code class="code-chip">/admin/questions?source_import_id=&lt;id&gt;</code>.
+    </div>
+
     {% if recent %}
     <table class="admin-table">
-      <thead><tr><th>ID</th><th>File / Title</th><th>Format</th><th>Status</th><th>Total</th><th>Failed</th><th></th></tr></thead>
+      <thead>
+        <tr>
+          <th>ID</th><th>File / Title</th><th>Format</th><th>Status</th>
+          <th>Total</th><th>Imported</th><th>Failed</th><th></th>
+        </tr>
+      </thead>
       <tbody>
         {% for r in recent %}
+        {% set ic = imported_counts.get(r.id, 0) %}
         <tr>
           <td>#{{ r.id }}</td>
           <td>
@@ -88,8 +103,17 @@
           <td>{% if r.detected_format %}<span class="code-chip">{{ r.detected_format }}</span>{% else %}<span class="muted">—</span>{% endif %}</td>
           <td><span class="pill pill-{{ r.status.value }}">{{ r.status.value }}</span></td>
           <td>{{ r.total_questions or 0 }}</td>
+          <td>{{ ic }}</td>
           <td>{{ r.failed_questions or 0 }}</td>
-          <td><a class="btn-ghost" href="/admin/imports/{{ r.id }}/preview">Open</a></td>
+          <td>
+            <a class="btn-ghost" href="/admin/imports/{{ r.id }}/preview">Open import</a>
+            {% if ic > 0 %}
+              <a class="btn-ghost" href="/admin/questions?source_import_id={{ r.id }}"
+                 title="Open the question bank filtered to questions imported by #{{ r.id }}">Review questions</a>
+            {% else %}
+              <span class="muted" title="This import has no live questions to review">No imported questions</span>
+            {% endif %}
+          </td>
         </tr>
         {% endfor %}
       </tbody>
