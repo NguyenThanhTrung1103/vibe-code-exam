@@ -2,7 +2,7 @@
 {% block title %}Admin · Import Excel{% endblock %}
 {% block admin_content %}
   <h1 class="admin-title">Admin Import Excel</h1>
-  <p class="admin-subtitle">Upload → Map columns → Preview rows → Confirm import.</p>
+  <p class="admin-subtitle">Upload → Map columns → Preview rows → Confirm import. Questions attach to the selected <strong>target exam</strong> (scoped by <strong>import id</strong> via <code class="code-chip">source_import_id</code>).</p>
 
   <ol class="steps" aria-label="Import steps">
     <li class="active"><span class="num">1</span> Upload</li>
@@ -28,30 +28,24 @@
         <label class="field-label" for="target-exam">Target exam<span class="required-mark">*</span></label>
         <select id="target-exam" name="target_exam_id" required>
           {% for exam, course, provider in exams %}
-            <option value="{{ exam.id }}">{{ provider.name }} · {{ course.name }} · {{ exam.name }}</option>
+            <option value="{{ exam.id }}">{{ provider.name }} · {{ course.name }} · {{ exam.name }} (id={{ exam.id }})</option>
           {% endfor %}
         </select>
-        <p class="field-help">Imported questions land in this exam as <strong>private/draft</strong>.</p>
+        <p class="field-help">Imported questions land in this exam as <strong>draft</strong> in the bank until you publish the exam for learners.</p>
       </div>
 
       <div class="field">
         <label class="field-label" for="upload-title">Dump title</label>
         <input id="upload-title" type="text" name="title" maxlength="255"
                placeholder="Example: Gate-A1 synthetic seed 2026-05-02" />
-        <p class="field-help">Used only to identify this import in the admin screen. Leave blank to fall back to the filename.</p>
+        <p class="field-help">Shown in Recent imports; falls back to filename if empty.</p>
       </div>
 
       <div class="field">
         <label class="field-label" for="upload-file">Question dump file<span class="required-mark">*</span></label>
         <input id="upload-file" type="file" name="file" accept=".xlsx,.html,.htm,.pdf,.txt" required />
         <p class="field-help">
-          Accepted:
-          <code class="code-chip">.xlsx</code>
-          <code class="code-chip">.html</code>
-          <code class="code-chip">.pdf</code>
-          <code class="code-chip">.txt</code>
-          · max 25 MB. XLSX uploads continue to the column-mapping step;
-          saved HTML / PDF / TXT dumps skip mapping and go straight to preview.
+          XLSX → mapping wizard. HTML / PDF / TXT → preview immediately after upload.
         </p>
       </div>
 
@@ -59,12 +53,11 @@
         <label class="field-label" for="upload-attestation">Upload attestation<span class="required-mark">*</span></label>
         <textarea id="upload-attestation" name="attestation" rows="2" required
                   placeholder="I confirm I have the right to upload this file."></textarea>
-        <p class="field-help">Required before upload. Minimum 4 characters.</p>
+        <p class="field-help">Minimum 4 characters.</p>
       </div>
 
       <div class="actions">
         <button class="btn-primary" type="submit">Upload file</button>
-        <span class="muted">Next: column mapping.</span>
       </div>
     </form>
   </section>
@@ -72,52 +65,143 @@
   <section class="card">
     <header class="card-header">
       <h2 class="card-title">Recent imports</h2>
-      <span class="card-meta">Latest 20</span>
+      <span class="card-meta">Latest 20 · grouped by <strong>import #</strong> + <strong>target exam</strong></span>
     </header>
 
     <div class="alert alert-info" role="note">
-      <strong>Saw "duplicate rows" on a fresh upload?</strong>
-      The questions are likely already in the bank from a previous import.
-      Find that previous import in the table below by <em>title</em>, <em>filename</em>,
-      <em>format</em>, or <em>ID</em>, then click <strong>Review questions</strong>
-      to open <code class="code-chip">/admin/questions?source_import_id=&lt;id&gt;</code>.
+      <strong>Two different “status” columns</strong>
+      <ul class="muted" style="margin:8px 0 0 18px;">
+        <li><strong>Import pipeline</strong> — where you are in the wizard (<code class="code-chip">normalized</code> = staged rows; <code class="code-chip">ready_to_publish</code> = confirm wrote rows into the question bank).</li>
+        <li><strong>Exam (target)</strong> — <code class="code-chip">draft</code> = not public; <code class="code-chip">published</code> = learners can open the exam page and practice (published questions only).</li>
+      </ul>
     </div>
 
-    {% if recent %}
-    <table class="admin-table">
+    <div class="alert alert-info" role="note">
+      <strong>Counts</strong> · <em>Staged</em> = rows in this import’s preview. <em>In bank</em> = live <code class="code-chip">questions</code> rows with this <code class="code-chip">source_import_id</code>. <em>OK / Err / Dup</em> = staged row outcomes before confirm.
+    </div>
+
+    {% if recent_rows %}
+    <div class="admin-table-wrap">
+    <table class="admin-table recent-imports-table">
       <thead>
         <tr>
-          <th>ID</th><th>File / Title</th><th>Format</th><th>Status</th>
-          <th>Total</th><th>Imported</th><th>Failed</th><th></th>
+          <th>Import</th>
+          <th>Dump</th>
+          <th>Format</th>
+          <th>Provider</th>
+          <th>Course</th>
+          <th>Exam <span class="muted">(target)</span></th>
+          <th>Slug</th>
+          <th>Exam</th>
+          <th>Import</th>
+          <th>Staged</th>
+          <th>Bank</th>
+          <th class="recent-imports-table__nums">OK</th>
+          <th class="recent-imports-table__nums">Err</th>
+          <th class="recent-imports-table__nums">Dup</th>
+          <th>Actions</th>
         </tr>
       </thead>
       <tbody>
-        {% for r in recent %}
-        {% set ic = imported_counts.get(r.id, 0) %}
-        <tr>
-          <td>#{{ r.id }}</td>
+        {% for row in recent_rows %}
+        {% set r = row.imp %}
+        {% set ex = row.exam %}
+        {% set ic = row.in_bank %}
+        {% set st = r.status.value %}
+        {% set cnt = row.item_counts %}
+        {% set ok_n = cnt.get('ok', 0) %}
+        {% set err_n = cnt.get('error', 0) %}
+        {% set dup_n = cnt.get('duplicate', 0) %}
+        {% set href_mapping = "/admin/imports/" ~ r.id ~ "/mapping" %}
+        {% set href_preview = "/admin/imports/" ~ r.id ~ "/preview" %}
+        {% set href_preview_errors = href_preview ~ "?filter=errors" %}
+        {% set href_questions = "/admin/questions?exam_id=" ~ (ex.id if ex else "") ~ "&source_import_id=" ~ r.id %}
+        {% set href_questions_import_only = "/admin/questions?source_import_id=" ~ r.id %}
+        {% set href_done = "/admin/imports/" ~ r.id ~ "/done" %}
+        {% set needs_map = (st == "needs_mapping") or (st == "uploaded" and r.file_type == "xlsx") %}
+        {% set has_staged = (r.total_questions or 0) > 0 %}
+        {% set id_href = href_mapping if needs_map else href_preview %}
+        {% set exam_pub = ex.publish_status.value if ex else "—" %}
+        {% set exam_is_draft = ex and ex.publish_status.value == "draft" %}
+        {% set exam_is_published = ex and ex.publish_status.value == "published" %}
+        {% set row_done = st in ("ready_to_publish", "published", "partially_verified") and ic > 0 %}
+        {% set row_active = needs_map or st in ("normalized", "ai_processing", "failed") or (st == "partially_verified" and ic == 0) %}
+        <tr class="recent-import-row {% if row_active %}recent-import-row--active{% elif row_done %}recent-import-row--done{% endif %}">
           <td>
-            <strong>{{ r.title or r.file_name }}</strong>
+            <a class="code-chip" href="{{ id_href }}">#{{ r.id }}</a>
+            <div class="muted" style="font-size:12px;">exam_id={{ r.target_exam_id or "—" }}</div>
+          </td>
+          <td>
+            <a href="{{ id_href }}"><strong>{{ r.title or r.file_name }}</strong></a>
             {% if r.title %}<br><span class="muted code-chip">{{ r.file_name }}</span>{% endif %}
           </td>
           <td>{% if r.detected_format %}<span class="code-chip">{{ r.detected_format }}</span>{% else %}<span class="muted">—</span>{% endif %}</td>
-          <td><span class="pill pill-{{ r.status.value }}">{{ r.status.value }}</span></td>
-          <td>{{ r.total_questions or 0 }}</td>
-          <td>{{ ic }}</td>
-          <td>{{ r.failed_questions or 0 }}</td>
+          <td>{{ row.provider.name if row.provider else "—" }}</td>
+          <td>{{ row.course.name if row.course else "—" }}</td>
+          <td>{{ row.exam.name if row.exam else "—" }}</td>
+          <td>{% if row.exam %}<code class="code-chip">{{ row.exam.slug }}</code>{% else %}—{% endif %}</td>
           <td>
-            <a class="btn-ghost" href="/admin/imports/{{ r.id }}/preview">Open import</a>
-            {% if ic > 0 %}
-              <a class="btn-ghost" href="/admin/questions?source_import_id={{ r.id }}"
-                 title="Open the question bank filtered to questions imported by #{{ r.id }}">Review questions</a>
+            {% if ex %}
+              <span class="pill pill-exam-{{ exam_pub }}">{{ exam_pub }}</span>
             {% else %}
-              <span class="muted" title="This import has no live questions to review">No imported questions</span>
+              <span class="muted">—</span>
+            {% endif %}
+          </td>
+          <td><span class="pill pill-{{ st }}">{{ st }}</span></td>
+          <td>{{ r.total_questions or 0 }}</td>
+          <td><strong>{{ ic }}</strong></td>
+          <td class="recent-imports-table__nums">{{ ok_n }}</td>
+          <td class="recent-imports-table__nums">{% if err_n %}<span class="recent-import-stat recent-import-stat--error">{{ err_n }}</span>{% else %}0{% endif %}</td>
+          <td class="recent-imports-table__nums">{{ dup_n }}</td>
+          <td class="recent-import-actions">
+            {% if err_n > 0 %}
+              <a class="btn-ghost recent-import-actions__err" href="{{ href_preview_errors }}">View errors ({{ err_n }})</a>
+            {% endif %}
+
+            {% if needs_map %}
+              <a class="btn-primary" href="{{ href_mapping }}">Mapping</a>
+            {% elif st in ("normalized", "partially_verified", "ai_processing", "failed") %}
+              <a class="btn-primary" href="{{ href_preview }}">Preview &amp; confirm</a>
+              {% if ic == 0 %}
+                <span class="muted">Bank empty until confirm.</span>
+              {% endif %}
+            {% elif st in ("ready_to_publish", "published") %}
+              <a class="btn-ghost" href="{{ href_preview }}">Preview</a>
+              <a class="btn-ghost" href="{{ href_done }}">Summary</a>
+            {% else %}
+              <a class="btn-ghost" href="{{ href_preview }}">Open</a>
+            {% endif %}
+
+            {% if ic > 0 %}
+              <a class="btn-primary" href="{{ href_questions_import_only }}">Review questions ({{ ic }})</a>
+            {% endif %}
+
+            {% if ex and exam_is_draft %}
+              {% if ic > 0 %}
+                <button type="button" class="btn"
+                  hx-post="/admin/exams/{{ ex.id }}/publish"
+                  hx-include="#page-csrf"
+                  hx-swap="none"
+                  hx-on::after-request="if(event.detail.successful) window.location.reload()">
+                  Publish exam
+                </button>
+              {% endif %}
+              <form method="post" action="/admin/exams/{{ ex.id }}/practice-preview/start" class="recent-import-inline-form">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+                <button type="submit" class="btn">Practice preview (admin)</button>
+              </form>
+            {% elif ex and exam_is_published %}
+              {% if row.public_exam_path %}
+                <a class="btn btn-primary" href="{{ row.public_exam_path }}">Open public exam</a>
+              {% endif %}
+              <span class="muted">Learners practice here when questions are <strong>published</strong> in the bank.</span>
             {% endif %}
           </td>
         </tr>
         {% endfor %}
       </tbody>
     </table>
+    </div>
     {% else %}
     <p class="muted">No prior imports yet.</p>
     {% endif %}

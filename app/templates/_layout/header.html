@@ -5,8 +5,15 @@
       <a href="/">Home</a>
       <a href="/vendors">Vendors</a>
       {% if current_user and current_user.role.value == "admin" %}
-        <a href="/admin/providers">Admin</a>
+        <a href="/admin"{% if request.url.path is defined and (request.url.path == '/admin' or request.url.path == '/admin/') %} class="is-active"{% endif %}>Admin</a>
       {% endif %}
     </nav>
   </div>
+  {% if current_user and current_user.role.value == "admin" and request.url.path is defined and request.url.path.startswith('/admin') %}
+  <div class="admin-header-subnav">
+    <div class="container">
+      {% include "admin/_nav.html" %}
+    </div>
+  </div>
+  {% endif %}
 </header>

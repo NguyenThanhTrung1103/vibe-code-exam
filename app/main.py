@@ -20,6 +20,7 @@ from app.routers import attempts, auth, health, practice, reports
 from app.routers.admin import audit as admin_audit
 from app.routers.admin import community_sources as admin_community_sources
 from app.routers.admin import courses as admin_courses
+from app.routers.admin import dashboard as admin_dashboard
 from app.routers.admin import exams as admin_exams
 from app.routers.admin import imports as admin_imports
 from app.routers.admin import product_versions as admin_product_versions
@@ -98,6 +99,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(public_search.router)
     app.include_router(public_legal.router)
     app.include_router(admin_audit.router)
+    app.include_router(admin_dashboard.router)
     app.include_router(admin_providers.router)
     app.include_router(admin_product_versions.router)
     app.include_router(admin_courses.router)

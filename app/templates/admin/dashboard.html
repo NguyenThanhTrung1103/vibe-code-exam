@@ -1,0 +1,149 @@
+{% extends "admin/_layout.html" %}
+{% block title %}Admin · Dashboard{% endblock %}
+{% block admin_content %}
+  <div class="admin-dash-header">
+    <h1 class="admin-title">Dashboard</h1>
+    <p class="admin-subtitle">Quick access to imports, exams, and the question bank — no URLs to memorize.</p>
+  </div>
+
+  {# --- Primary actions (always visible) --- #}
+  <section class="admin-dash-cards" aria-label="Primary actions">
+    <a class="admin-dash-card admin-dash-card--import" href="/admin/imports">
+      <span class="admin-dash-card__label">Import dump</span>
+      <span class="admin-dash-card__hint">XLSX · HTML · PDF · TXT → map, preview, confirm</span>
+      <span class="admin-dash-card__cta btn-primary">Upload &amp; import →</span>
+    </a>
+    <a class="admin-dash-card admin-dash-card--exams" href="/admin/exams">
+      <span class="admin-dash-card__label">Manage exams</span>
+      <span class="admin-dash-card__hint">Create, publish, practice preview</span>
+      <span class="admin-dash-card__cta btn-primary">Open exams →</span>
+    </a>
+    <a class="admin-dash-card admin-dash-card--questions" href="/admin/questions">
+      <span class="admin-dash-card__label">Review questions</span>
+      <span class="admin-dash-card__hint">Filter by exam or source import</span>
+      <span class="admin-dash-card__cta btn-primary">Open bank →</span>
+    </a>
+  </section>
+
+  {# --- Alerts --- #}
+  {% if import_attention %}
+  <div class="alert alert-error admin-dash-alert" role="alert">
+    <strong>Import issues need attention</strong> — {{ import_attention|length }} recent import(s) have staged errors or failed rows.
+    <ul class="admin-dash-alert-list">
+      {% for row in import_attention %}
+      {% set r = row.imp %}
+      {% set err_n = row.item_counts.get('error', 0) %}
+      <li>
+        Import <a href="/admin/imports/{{ r.id }}/preview{% if err_n %}?filter=errors{% endif %}">#{{ r.id }}</a>
+        · {{ r.title or r.file_name }}
+        {% if err_n %}· <strong>{{ err_n }}</strong> row error(s){% endif %}
+        {% if r.failed_questions %}· header failed {{ r.failed_questions }}{% endif %}
+        · target exam {% if row.exam %}#{{ row.exam.id }}{% else %}—{% endif %}
+      </li>
+      {% endfor %}
+    </ul>
+    <p class="muted" style="margin:8px 0 0;"><a href="/admin/imports">Full import history →</a></p>
+  </div>
+  {% else %}
+  <div class="alert alert-success admin-dash-alert" role="status">
+    <strong>No import errors</strong> in the last {{ recent_rows|length }} imports (or none staged yet).
+  </div>
+  {% endif %}
+
+  {# --- Accordions: imports snapshot + exams --- #}
+  <div class="admin-dash-accordions" x-data="{ sec: 'imports' }">
+    <div class="admin-dash-tabbar" role="tablist">
+      <button type="button" class="admin-dash-tab" :class="{ 'is-active': sec === 'imports' }" @click="sec = 'imports'" role="tab" :aria-selected="sec === 'imports'">Recent imports</button>
+      <button type="button" class="admin-dash-tab" :class="{ 'is-active': sec === 'exams' }" @click="sec = 'exams'" role="tab" :aria-selected="sec === 'exams'">Exams &amp; status</button>
+    </div>
+
+    <section x-show="sec === 'imports'" class="card admin-dash-panel" role="tabpanel">
+      <header class="card-header">
+        <h2 class="card-title">Recent imports</h2>
+        <span class="card-meta"><a href="/admin/imports">Open full import page →</a></span>
+      </header>
+      {% if recent_rows %}
+      <table class="admin-table admin-dash-mini-table">
+        <thead>
+          <tr>
+            <th>#</th><th>Dump</th><th>Exam</th><th>Exam Δ</th><th>Import</th><th>Bank</th><th>Err</th><th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in recent_rows %}
+          {% set r = row.imp %}
+          {% set ex = row.exam %}
+          {% set ic = row.in_bank %}
+          {% set err_n = row.item_counts.get('error', 0) %}
+          {% set st = r.status.value %}
+          {% set exam_pub = ex.publish_status.value if ex else "—" %}
+          <tr class="{% if err_n %}recent-import-row recent-import-row--active{% endif %}">
+            <td><a class="code-chip" href="/admin/imports/{{ r.id }}/preview">#{{ r.id }}</a></td>
+            <td>{{ (r.title or r.file_name)[:42] }}{% if (r.title or r.file_name)|length > 42 %}…{% endif %}</td>
+            <td>{% if ex %}{{ ex.name }}{% else %}—{% endif %}</td>
+            <td>{% if ex %}<span class="pill pill-exam-{{ exam_pub }}">{{ exam_pub }}</span>{% else %}—{% endif %}</td>
+            <td><span class="pill pill-{{ st }}">{{ st }}</span></td>
+            <td><strong>{{ ic }}</strong></td>
+            <td>{% if err_n %}<span class="recent-import-stat--error">{{ err_n }}</span>{% else %}0{% endif %}</td>
+            <td><a class="btn-ghost" href="/admin/questions?source_import_id={{ r.id }}">Review</a></td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <p class="muted">No imports yet. Use <strong>Import dump</strong> above.</p>
+      {% endif %}
+    </section>
+
+    <section x-show="sec === 'exams'" x-cloak class="card admin-dash-panel" role="tabpanel">
+      <header class="card-header">
+        <h2 class="card-title">Exams (recent)</h2>
+        <span class="card-meta"><a href="/admin/exams">Manage all exams →</a></span>
+      </header>
+      {% if exam_rows %}
+      <table class="admin-table admin-dash-mini-table">
+        <thead>
+          <tr>
+            <th>Exam</th><th>Catalog</th><th>Slug</th><th>Status</th><th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for exam, course, provider in exam_rows %}
+          {% set pub = exam.publish_status.value %}
+          {% set exam_is_draft = pub == "draft" %}
+          {% set exam_is_published = pub == "published" %}
+          <tr>
+            <td><strong>{{ exam.name }}</strong></td>
+            <td class="muted">{{ provider.name }} · {{ course.name }}</td>
+            <td><code class="code-chip">{{ exam.slug }}</code></td>
+            <td><span class="pill pill-exam-{{ pub }}">{{ pub }}</span></td>
+            <td class="recent-import-actions">
+              <a class="btn-ghost" href="/admin/questions?exam_id={{ exam.id }}">Review questions</a>
+              {% if exam_is_draft %}
+              <button type="button" class="btn"
+                hx-post="/admin/exams/{{ exam.id }}/publish"
+                hx-include="#page-csrf"
+                hx-swap="none"
+                hx-on::after-request="if(event.detail.successful) window.location.reload()">
+                Publish
+              </button>
+              <form method="post" action="/admin/exams/{{ exam.id }}/practice-preview/start" class="recent-import-inline-form">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+                <button type="submit" class="btn">Practice preview</button>
+              </form>
+              {% elif exam_is_published %}
+              <a class="btn-primary" href="/exams/{{ provider.slug }}/{{ exam.slug }}">Open public exam</a>
+              {% endif %}
+              <a class="btn-ghost" href="/admin/exams">Full list</a>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <p class="muted">No exams in catalog. Create one under <a href="/admin/exams">Manage exams</a>.</p>
+      {% endif %}
+    </section>
+  </div>
+
+{% endblock %}

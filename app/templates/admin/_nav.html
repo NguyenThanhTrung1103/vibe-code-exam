@@ -1,0 +1,10 @@
+{# Primary admin navigation — requires `request` and optionally `csrf_token` (for HTMX forms). #}
+{% set p = request.url.path %}
+<nav class="admin-primary-nav" aria-label="Admin sections">
+  <a class="admin-primary-nav__link {% if p == '/admin' or p.rstrip('/') == '/admin' %}is-active{% endif %}" href="/admin">Dashboard</a>
+  <a class="admin-primary-nav__link {% if p.startswith('/admin/imports') %}is-active{% endif %}" href="/admin/imports">Import dump</a>
+  <a class="admin-primary-nav__link {% if p.startswith('/admin/exams') %}is-active{% endif %}" href="/admin/exams">Manage exams</a>
+  <a class="admin-primary-nav__link {% if p.startswith('/admin/questions') %}is-active{% endif %}" href="/admin/questions">Review questions</a>
+  <span class="admin-primary-nav__sep" aria-hidden="true">·</span>
+  <a class="admin-primary-nav__link admin-primary-nav__link--muted {% if p.startswith('/admin/providers') %}is-active{% endif %}" href="/admin/providers">Catalog</a>
+</nav>
