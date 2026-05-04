@@ -330,6 +330,50 @@ If two columns auto-map to the same canonical field, the mapping page
 now shows a yellow warning listing the conflicting headers; pick a
 single owner per canonical field to avoid silent overwrites.
 
+### question_type aliases recognised by the importer
+
+Excel dumps may use `question_type=choice`. The importer infers
+`single` / `multiple` based on the resolved `correct_answer` count.
+The full alias table the validator accepts:
+
+| Cell value (case-insensitive, hyphens / spaces collapsed) | Stored as |
+|---|---|
+| `single`, `single_choice`, `one_choice`, `radio`         | `single` |
+| `multiple`, `multi`, `multiple_choice`, `multi_choice`, `checkbox`, `checkboxes` | `multiple` |
+| `true_false`, `truefalse`, `boolean`, `bool`, `tf`        | `true_false` |
+| `choice` or blank                                         | inferred from `correct_answer` count (≥ 2 → `multiple`, else `single`) |
+
+Anything outside this set still surfaces a clear
+`question_type 'X' not in [...]` error so unknown values are not
+silently mis-classified.
+
+### correct_answer normalisation
+
+The validator accepts the following correct-answer shapes (mixed
+shapes within one cell are also fine — `,` / `;` / newline split
+first, then per-entry resolution):
+
+* Letter labels `A`..`F` (case-insensitive); single or multi via
+  comma/semicolon/newline.
+* Contiguous multi-letter answers `AC` / `BD` / `ACE` (no
+  separator) are expanded into individual labels.
+* Numeric labels `1`..`6` map to `A`..`F`. `1;3` → `A,C`,
+  `4;6` → `D,F`, etc.
+* Verbatim option text (case-fold) — the cell text is matched
+  against each parsed option text.
+
+A correct_answer that references a label with no matching option
+(e.g. `E` when only `A`..`D` exist, or numeric `7` when the row
+only carries 6 options) is a legitimate row-level error and stays
+in the `error` bucket.
+
+### Storage cap raised to A–F (six options)
+
+`combined_options` and discrete `option_a`..`option_f` are now both
+honoured end-to-end (validator + question_service +
+attempt_service). The previous A–E cap rejected legitimate
+six-option questions.
+
 ## Common issues
 
 * **`detected_format` chip is blank** — the detector returned None. Either

@@ -52,7 +52,7 @@ if TYPE_CHECKING:  # pragma: no cover
     pass
 
 
-_OPTION_LABELS_VALID = ("A", "B", "C", "D", "E")
+_OPTION_LABELS_VALID = ("A", "B", "C", "D", "E", "F")
 
 
 # ---------------------------------------------------------------------------
@@ -119,7 +119,7 @@ def _check_owner(attempt: Attempt, user: User) -> None:
 
 
 def _parse_selected_labels(raw: str | list[str] | None) -> list[str]:
-    """Normalise to sorted unique upper-case labels in {'A'..'E'}.
+    """Normalise to sorted unique upper-case labels in {'A'..'F'}.
 
     Accepts:
       None         → []          (clear selection)

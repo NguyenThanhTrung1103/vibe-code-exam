@@ -113,6 +113,231 @@ def test_validate_under_two_options_is_error() -> None:
 
 
 # ---------------------------------------------------------------------------
+# question_type alias normalization (Vietnamese XLSX dump #142 + friends)
+# ---------------------------------------------------------------------------
+
+
+def test_qtype_choice_with_single_correct_resolves_to_single() -> None:
+    row = _good_row()
+    row["question_type"] = "choice"
+    row["correct_answer"] = "A"
+    r = validate_row(row)
+    assert r.status == ImportItemStatus.ok
+    assert r.canonical["question_type"] == "single"
+
+
+def test_qtype_choice_with_multi_correct_resolves_to_multiple() -> None:
+    row = _good_row()
+    row["question_type"] = "choice"
+    row["correct_answer"] = "A,C"
+    r = validate_row(row)
+    assert r.status == ImportItemStatus.ok
+    assert r.canonical["question_type"] == "multiple"
+
+
+def test_qtype_one_choice_alias_resolves_to_single() -> None:
+    """`one_choice` is the actual cell value seen on import #142."""
+    row = _good_row()
+    row["question_type"] = "one_choice"
+    r = validate_row(row)
+    assert r.status == ImportItemStatus.ok
+    assert r.canonical["question_type"] == "single"
+
+
+def test_qtype_multi_choice_alias_resolves_to_multiple() -> None:
+    """`multi_choice` is the actual multi-answer cell value on #142."""
+    row = _good_row()
+    row["question_type"] = "multi_choice"
+    row["correct_answer"] = "A,C"
+    r = validate_row(row)
+    assert r.status == ImportItemStatus.ok
+    assert r.canonical["question_type"] == "multiple"
+
+
+def test_qtype_radio_alias_resolves_to_single() -> None:
+    row = _good_row()
+    row["question_type"] = "radio"
+    r = validate_row(row)
+    assert r.status == ImportItemStatus.ok
+    assert r.canonical["question_type"] == "single"
+
+
+def test_qtype_checkbox_alias_resolves_to_multiple() -> None:
+    row = _good_row()
+    row["question_type"] = "checkbox"
+    row["correct_answer"] = "A,C"
+    r = validate_row(row)
+    assert r.status == ImportItemStatus.ok
+    assert r.canonical["question_type"] == "multiple"
+
+
+def test_qtype_true_false_alias_normalizes() -> None:
+    """`Boolean` / `truefalse` should land on `true_false`."""
+    row = _good_row()
+    row["question_type"] = "Boolean"
+    r = validate_row(row)
+    assert r.status == ImportItemStatus.ok
+    assert r.canonical["question_type"] == "true_false"
+
+
+def test_qtype_blank_with_multi_correct_infers_multiple() -> None:
+    row = _good_row()
+    row["question_type"] = ""
+    row["correct_answer"] = "A,C"
+    r = validate_row(row)
+    assert r.status == ImportItemStatus.ok
+    assert r.canonical["question_type"] == "multiple"
+
+
+def test_qtype_unknown_value_still_errors_clearly() -> None:
+    """Unknown alias must surface a precise error, not silently mis-route."""
+    row = _good_row()
+    row["question_type"] = "essay"
+    r = validate_row(row)
+    assert r.status == ImportItemStatus.error
+    assert "question_type" in (r.error_message or "")
+
+
+# ---------------------------------------------------------------------------
+# correct_answer normalization (numeric + contiguous + multi-letter + F)
+# ---------------------------------------------------------------------------
+
+
+def test_correct_answer_contiguous_letters_AC_expands() -> None:
+    row = _good_row()
+    row["correct_answer"] = "AC"
+    r = validate_row(row)
+    assert r.status == ImportItemStatus.ok
+    assert r.canonical["correct_answer"] == ["A", "C"]
+    assert r.canonical["question_type"] == "multiple"
+
+
+def test_correct_answer_contiguous_letters_BD_expands() -> None:
+    row = _good_row()
+    row["option_d"] = "delta"
+    row["correct_answer"] = "BD"
+    r = validate_row(row)
+    assert r.status == ImportItemStatus.ok, r.error_message
+    assert r.canonical["correct_answer"] == ["B", "D"]
+
+
+def test_correct_answer_numeric_semicolon_pair_resolves() -> None:
+    """`1;3` is the canonical multi-answer shape on import #142."""
+    row = _good_row()
+    row["correct_answer"] = "1;3"
+    r = validate_row(row)
+    assert r.status == ImportItemStatus.ok
+    assert r.canonical["correct_answer"] == ["A", "C"]
+    assert r.canonical["question_type"] == "multiple"
+
+
+def test_correct_answer_numeric_comma_pair_resolves() -> None:
+    row = _good_row()
+    row["correct_answer"] = "1,3"
+    r = validate_row(row)
+    assert r.status == ImportItemStatus.ok
+    assert r.canonical["correct_answer"] == ["A", "C"]
+
+
+def test_correct_answer_numeric_six_resolves_to_F() -> None:
+    """1–6 must map to A–F end-to-end (option_f is now a real slot)."""
+    row = _good_row()
+    row["option_d"] = "delta"
+    row["option_e"] = "epsilon"
+    row["option_f"] = "phi"
+    row["correct_answer"] = "6"
+    r = validate_row(row)
+    assert r.status == ImportItemStatus.ok
+    assert r.canonical["correct_answer"] == ["F"]
+
+
+def test_correct_answer_full_text_match_resolves() -> None:
+    """A verbatim option text in the correct_answer cell maps to its label."""
+    row = _good_row()
+    row["correct_answer"] = "Voice Packet Node"  # verbatim option_b text
+    r = validate_row(row)
+    assert r.status == ImportItemStatus.ok, r.error_message
+    assert r.canonical["correct_answer"] == ["B"]
+
+
+def test_correct_answer_label_out_of_options_errors() -> None:
+    """`E` referenced when only A–D are present → legitimate error."""
+    row = _good_row()
+    row["correct_answer"] = "E"
+    r = validate_row(row)
+    assert r.status == ImportItemStatus.error
+    assert "no matching option" in (r.error_message or "")
+
+
+# ---------------------------------------------------------------------------
+# Real import #142-style row — combined_options + Vietnamese qtype
+# ---------------------------------------------------------------------------
+
+
+def test_validate_import_142_style_single_choice_row() -> None:
+    """End-to-end: a row that mirrors a real one_choice line from #142."""
+    raw = {
+        "question_text": "Which protocol works at the network layer?",
+        "question_type": "one_choice",
+        "combined_options": "TCP;UDP;IP;HTTP",
+        "correct_answer": "3",
+        "tags": "ccna_online",
+    }
+    normalized = normalize_row(raw)
+    r = validate_row(normalized)
+    assert r.status == ImportItemStatus.ok, r.error_message
+    assert r.canonical["question_type"] == "single"
+    assert r.canonical["correct_answer"] == ["C"]
+    assert dict(r.canonical["options"]) == {
+        "A": "TCP",
+        "B": "UDP",
+        "C": "IP",
+        "D": "HTTP",
+    }
+
+
+def test_validate_import_142_style_multi_choice_row() -> None:
+    """End-to-end: a row that mirrors a real multi_choice line from #142."""
+    raw = {
+        "question_text": "Which of the following are private IP networks?",
+        "question_type": "multi_choice",
+        "combined_options": "172.31.0.0;172.32.0.0;192.168.255.0;192.1.168.0;11.0.0.0",
+        "correct_answer": "1;3",
+        "tags": "ccna_online",
+    }
+    normalized = normalize_row(raw)
+    r = validate_row(normalized)
+    assert r.status == ImportItemStatus.ok, r.error_message
+    assert r.canonical["question_type"] == "multiple"
+    assert r.canonical["correct_answer"] == ["A", "C"]
+    assert dict(r.canonical["options"]) == {
+        "A": "172.31.0.0",
+        "B": "172.32.0.0",
+        "C": "192.168.255.0",
+        "D": "192.1.168.0",
+        "E": "11.0.0.0",
+    }
+
+
+def test_validate_import_142_style_multi_choice_with_F() -> None:
+    """6-option row + correct=4;6 stretches the new A–F support."""
+    raw = {
+        "question_text": "Pick the transport-layer protocols (choose two):",
+        "question_type": "multi_choice",
+        "combined_options": "Ethernet;HTTP;IP;UDP;SMTP;TCP",
+        "correct_answer": "4;6",
+        "tags": "ccna_online",
+    }
+    normalized = normalize_row(raw)
+    r = validate_row(normalized)
+    assert r.status == ImportItemStatus.ok, r.error_message
+    assert r.canonical["question_type"] == "multiple"
+    assert r.canonical["correct_answer"] == ["D", "F"]
+    options = dict(r.canonical["options"])
+    assert options["F"] == "TCP"
+
+
+# ---------------------------------------------------------------------------
 # Dedup
 # ---------------------------------------------------------------------------
 
@@ -342,8 +567,7 @@ def test_import_142_full_fixture_shape_auto_map() -> None:
     assert m["Mô tả thêm"] == "reference"
     assert m["Tags (Các đáp án ngăn cách nhau bởi dấu chấm phẩy)"] == "tags"
     assert (
-        m["Danh sách đáp án (Các đáp án ngăn cách nhau bởi dấu chấm phẩy) *"]
-        == "combined_options"
+        m["Danh sách đáp án (Các đáp án ngăn cách nhau bởi dấu chấm phẩy) *"] == "combined_options"
     )
     assert (
         m[

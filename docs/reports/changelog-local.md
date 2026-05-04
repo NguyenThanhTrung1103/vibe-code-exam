@@ -4,6 +4,109 @@ Reverse-chronological log of significant changes that exist on the local working
 
 ---
 
+## 2026-05-04 (night) — Excel choice qtype + multi-answer + A–F support
+
+**Status:** Validator + storage cap. No schema migration. No DELETE
+of confirmed questions. Fixes the 40-error preview reported on
+import #142.
+
+### Root cause
+
+Two unrelated gaps in the validator surface as 40 errors on the
+preview for the Vietnamese XLSX dump #142:
+
+1. **`question_type` was checked literally against the small set
+   `{single, multiple, true_false}`.** The dump carries values like
+   `one_choice` and `multi_choice` (and per the user's spec also
+   `choice`, `radio`, `checkbox`, `boolean`, …). Every row was
+   rejected on that basis alone.
+2. **Numeric / contiguous multi-answer paths existed but the
+   storage layer capped option labels at A–E.** Rows with six
+   options + `correct_answer=4;6` (D + F) failed because option_f
+   was silently dropped at confirm-time even though the
+   normalizer's combined_options splitter already produced six
+   slots.
+
+### What changed
+
+- `app/services/import_validator.py`:
+  - New `_QTYPE_ALIAS` map and `_normalize_question_type()` helper.
+    Recognises `single` / `single_choice` / `one_choice` / `radio` →
+    `single`; `multiple` / `multi` / `multiple_choice` /
+    `multi_choice` / `checkbox` / `checkboxes` → `multiple`;
+    `true_false` / `truefalse` / `boolean` / `bool` / `tf` →
+    `true_false`; `choice` and blank cells fall through to
+    `_infer_question_type` (≥ 2 correct → `multiple`, else `single`).
+    Unknown values still surface a clear "question_type 'X' not in
+    [...]" error.
+  - `OPTION_LABELS` extended from `A..E` to `A..F`. Numeric path now
+    accepts `1..6`. Multi-letter contiguous expansion already
+    covered F.
+- `app/services/question_service.py`:
+  - `OPTION_LABELS` extended to `A..F`. Storage cap lifted from 5
+    options to 6, error message updated ("at most six options
+    allowed (A–F)").
+- `app/services/attempt_service.py`:
+  - `_OPTION_LABELS_VALID` extended to `A..F`. Selection parser
+    docstring updated.
+- `tests/test_import_unit.py`:
+  - 17 new validator tests covering: `choice` + single/multi;
+    `one_choice`/`multi_choice`/`radio`/`checkbox`/`Boolean`/blank;
+    unknown values still error; `AC` / `BD` contiguous expansion;
+    `1;3` and `1,3` numeric pairs; numeric `6` → F (with option_f
+    populated); verbatim option text match; legitimate
+    out-of-options error; three real #142-style row scenarios
+    (single, multi, multi-with-F).
+- `tests/test_question_schemas_unit.py`:
+  - `test_validate_options_max_five` renamed to
+    `test_validate_options_max_six`; new
+    `test_validate_options_accepts_six` proving A–F is accepted.
+- `docs/ops/exam-platform-import-runbook.md`:
+  - New "question_type aliases recognised by the importer" table.
+  - New "correct_answer normalisation" section.
+  - Note that storage cap is now A–F.
+
+### Result for import #142
+
+Re-staged on the LXC after deploy via
+`parse_and_stage(import_id=142)` (after deleting the 40 stale staged
+items — staging data only, no questions touched):
+
+| Bucket | Before | After |
+|---|---|---|
+| Total staged rows | 40 | 40 |
+| ok | 0 | 4 |
+| duplicate | 0 | 35 (already imported by an earlier run) |
+| error | 40 | 1 (row 9: correct_answer=`7` references a 7th option, beyond the A–F storage cap — legitimate edge case per the user's spec) |
+
+The single remaining error is structural (the source row carries
+8 listed options and `correct_answer=7`), not a normalisation gap.
+Lifting beyond A–F would require schema work that the user did not
+ask for.
+
+### Strict boundaries respected
+
+- No cleanup SQL.
+- No DELETE / UPDATE of imported questions.
+- `import_items` for #142 was deleted then re-staged via
+  `parse_and_stage` — that is staging data, separate from the
+  protected `questions` table.
+- No new real / large imports.
+- No internet fetch / scrape.
+- No nginx / cloudflared / Postgres / Redis config touched.
+- Only `exam-platform-web.service` restarted.
+
+### Quality gates
+
+| Gate | Result |
+|---|---|
+| `uv run ruff check app tests` | All checks passed. |
+| `uv run ruff format --check app tests` | 135 files already formatted. |
+| `uv run mypy app` | Success: no issues found in 95 source files. |
+| `uv run pytest` | **326 passed, 98 skipped, 1 warning in 6.95 s.** |
+
+---
+
 ## 2026-05-04 (late evening) — Vietnamese XLSX mapping fix (combined_options)
 
 **Status:** UI + alias-map + tests + docs. No schema migration. No

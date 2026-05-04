@@ -45,7 +45,7 @@ from app.models.questions import (
 )
 from app.models.users import User
 
-OPTION_LABELS = ("A", "B", "C", "D", "E")
+OPTION_LABELS = ("A", "B", "C", "D", "E", "F")
 
 
 class QuestionNotFoundError(LookupError):
@@ -86,8 +86,8 @@ def _validate_options(
     """Raise `QuestionValidationError` if option set is malformed."""
     if not options or len(options) < 2:
         raise QuestionValidationError("at least two non-empty options required")
-    if len(options) > 5:
-        raise QuestionValidationError("at most five options allowed (A–E)")
+    if len(options) > 6:
+        raise QuestionValidationError("at most six options allowed (A–F)")
     labels = [lbl for lbl, _ in options]
     if labels != sorted(labels) or labels != list(OPTION_LABELS[: len(labels)]):
         raise QuestionValidationError("option labels must be A,B,...; consecutive starting at A")

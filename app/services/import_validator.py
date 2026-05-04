@@ -20,9 +20,37 @@ from app.services.import_community import extract_community_payload
 
 ALLOWED_DIFFICULTY = {"easy", "medium", "hard"}
 ALLOWED_QTYPE = {"single", "multiple", "true_false"}
-OPTION_LABELS = ("A", "B", "C", "D", "E")  # 1:1 with option_a..option_e
+# 1:1 with option_a..option_f. Vietnamese / dump-style XLSX feeds frequently
+# carry up to 6 options (combined_options is split into a..f).
+OPTION_LABELS = ("A", "B", "C", "D", "E", "F")
 MAX_QUESTION_LEN = 4000
 MAX_OPTION_LEN = 1000
+
+# Question-type aliases the importer accepts. Keys are the lower-cased,
+# space-and-hyphen-collapsed form of whatever the dump cell carries.
+# `choice` is intentionally absent — it routes to inference based on the
+# correct-answer count (see `_normalize_question_type`).
+_QTYPE_ALIAS: dict[str, str] = {
+    "single": "single",
+    "single_choice": "single",
+    "singlechoice": "single",
+    "one_choice": "single",
+    "onechoice": "single",
+    "radio": "single",
+    "multiple": "multiple",
+    "multi": "multiple",
+    "multiple_choice": "multiple",
+    "multiplechoice": "multiple",
+    "multi_choice": "multiple",
+    "multichoice": "multiple",
+    "checkbox": "multiple",
+    "checkboxes": "multiple",
+    "true_false": "true_false",
+    "truefalse": "true_false",
+    "boolean": "true_false",
+    "bool": "true_false",
+    "tf": "true_false",
+}
 
 
 @dataclass(slots=True)
@@ -47,7 +75,7 @@ def validate_row(normalized: dict[str, Any]) -> ValidationResult:
     options = _collect_options(normalized, errors)
     correct = _collect_correct_answer(normalized, options, errors)
 
-    qtype = normalized.get("question_type") or _infer_question_type(correct)
+    qtype = _normalize_question_type(normalized.get("question_type"), correct)
     if qtype not in ALLOWED_QTYPE:
         errors.append(f"question_type {qtype!r} not in {sorted(ALLOWED_QTYPE)}")
 
@@ -192,3 +220,33 @@ def _infer_question_type(correct: list[str]) -> str:
     if len(correct) > 1:
         return "multiple"
     return "single"
+
+
+def _normalize_question_type(raw: Any, correct: list[str]) -> str:
+    """Map a raw `question_type` cell to one of `ALLOWED_QTYPE`.
+
+    Recognised aliases (see `_QTYPE_ALIAS`):
+      single / single_choice / one_choice / radio        → single
+      multiple / multi / multiple_choice / multi_choice  → multiple
+      checkbox / checkboxes                              → multiple
+      true_false / truefalse / boolean / bool / tf       → true_false
+
+    Special-case `choice` and blank cells: defer to `_infer_question_type`
+    based on the resolved correct-answer count (≥ 2 → multiple, else single).
+
+    Unknown values fall through unchanged so the caller surfaces a clear
+    `question_type 'X' not in [...]` error message.
+    """
+    if raw is None:
+        return _infer_question_type(correct)
+    if not isinstance(raw, str):
+        raw = str(raw)
+    s = raw.strip().lower().replace("-", "_").replace(" ", "_")
+    if not s:
+        return _infer_question_type(correct)
+    # Collapse repeated underscores from messy headers like "multi__choice".
+    while "__" in s:
+        s = s.replace("__", "_")
+    if s == "choice":
+        return _infer_question_type(correct)
+    return _QTYPE_ALIAS.get(s, s)

@@ -28,13 +28,34 @@ def test_validate_options_min_two() -> None:
         _validate_options(_opts(("A", "x")), ["A"], QuestionType.single)
 
 
-def test_validate_options_max_five() -> None:
-    with pytest.raises(QuestionValidationError, match="at most five"):
+def test_validate_options_max_six() -> None:
+    """Storage cap raised from A–E to A–F on 2026-05-04 to match dump-style
+    XLSX feeds whose `combined_options` cell can carry up to six options.
+    A seventh option is still rejected.
+    """
+    with pytest.raises(QuestionValidationError, match="at most six"):
         _validate_options(
-            _opts(("A", "1"), ("B", "2"), ("C", "3"), ("D", "4"), ("E", "5"), ("F", "6")),
+            _opts(
+                ("A", "1"),
+                ("B", "2"),
+                ("C", "3"),
+                ("D", "4"),
+                ("E", "5"),
+                ("F", "6"),
+                ("G", "7"),
+            ),
             ["A"],
             QuestionType.single,
         )
+
+
+def test_validate_options_accepts_six() -> None:
+    """A six-option question (A–F) must validate without raising."""
+    _validate_options(
+        _opts(("A", "1"), ("B", "2"), ("C", "3"), ("D", "4"), ("E", "5"), ("F", "6")),
+        ["A"],
+        QuestionType.single,
+    )
 
 
 def test_validate_options_consecutive_labels() -> None:
