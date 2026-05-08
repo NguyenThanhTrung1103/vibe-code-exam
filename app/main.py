@@ -5,6 +5,12 @@ Run locally with: `uvicorn app.main:app --reload`.
 
 from __future__ import annotations
 
+# Import-side-effect: registers the `pretty_vendor` Jinja filter on the
+# global Jinja2 FILTERS registry so every per-router `Jinja2Templates`
+# Environment created later inherits it. MUST stay above router imports
+# (routers create their templates at import time).
+from app.utils.display import pretty_vendor_name  # noqa: I001  (side-effect import order matters)
+
 import sentry_sdk
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
@@ -37,7 +43,6 @@ from app.security.error_handler import install_error_handlers
 from app.security.headers import SecurityHeadersMiddleware
 from app.security.proxy import install_proxy_headers
 from app.security.sanitize import render_markdown
-from app.utils.display import pretty_vendor_name
 
 
 def _init_sentry(settings: Settings) -> None:

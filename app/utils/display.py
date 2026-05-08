@@ -2,9 +2,18 @@
 
 Keeps presentation logic out of routes/services so we don't accidentally
 mutate the DB just to fix a label.
+
+Filter registration:
+    Each router creates its own `fastapi.templating.Jinja2Templates(...)`,
+    so attaching a filter to one Environment does not propagate. Importing
+    this module patches `jinja2.filters.FILTERS` at module load — any
+    `jinja2.Environment` created *after* this import inherits the filter.
+    Therefore `app.main` MUST import this module before importing routers.
 """
 
 from __future__ import annotations
+
+from jinja2.filters import FILTERS as _JINJA_FILTERS
 
 
 def pretty_vendor_name(name: str | None) -> str:
@@ -29,3 +38,9 @@ def pretty_vendor_name(name: str | None) -> str:
     if any(ch.isupper() for ch in cleaned):
         return cleaned
     return " ".join(token.capitalize() for token in cleaned.split())
+
+
+# Side-effect at module import: every Jinja2 Environment created from this
+# point on inherits the filter, so per-router Jinja2Templates instances
+# (which each have their own Environment) all see `| pretty_vendor`.
+_JINJA_FILTERS["pretty_vendor"] = pretty_vendor_name
