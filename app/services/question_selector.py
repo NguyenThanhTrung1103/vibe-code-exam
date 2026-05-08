@@ -63,8 +63,28 @@ def shuffled_question_ids(
     return ids
 
 
+def list_questions_for_admin_preview(session: Session, *, exam_id: int) -> list[Question]:
+    """All non-deleted, non-retired bank questions for an exam (any status).
+
+    Used only by `start_admin_preview_attempt` so an administrator can run a
+    practice session against draft/private exams whose questions are still
+    `imported` / `needs_review` / etc. Published public attempts continue to use
+    `list_published_active_questions`.
+    """
+    return list(
+        session.scalars(
+            select(Question)
+            .where(Question.exam_id == exam_id)
+            .where(Question.deleted_at.is_(None))
+            .where(Question.retired_at.is_(None))
+            .order_by(Question.id)
+        )
+    )
+
+
 __all__ = [
     "list_published_active_questions",
+    "list_questions_for_admin_preview",
     "publishable_question_filter",
     "shuffled_question_ids",
 ]

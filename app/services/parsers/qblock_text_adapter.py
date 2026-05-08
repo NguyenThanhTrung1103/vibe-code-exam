@@ -31,7 +31,7 @@ NAME = "qblock_text"
 PRIORITY = 50
 
 _QUESTION_HEAD_RE = re.compile(r"^\s*QUESTION\s+(\d+)\b", re.IGNORECASE)
-_OPTION_LINE_RE = re.compile(r"^\s*([A-Fa-f])[\.\)\:\-]\s*(.+?)\s*$")
+_OPTION_LINE_RE = re.compile(r"^\s*([A-Ha-h])[\.\)\:\-]\s*(.+?)\s*$")
 _ANSWER_RE = re.compile(r"^\s*Answer\s*[:\-]\s*(.+?)\s*$", re.IGNORECASE)
 _EXPLANATION_RE = re.compile(
     r"^\s*(?:Explanation|Reason|Rationale)\s*[:\-]?\s*(.*)$", re.IGNORECASE

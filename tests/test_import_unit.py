@@ -112,6 +112,38 @@ def test_validate_under_two_options_is_error() -> None:
     assert "at least two options" in (r.error_message or "")
 
 
+def test_combined_options_seven_slots_now_ok_under_a_h() -> None:
+    """7-piece combined_options splits cleanly into A..G under the A–H cap."""
+    raw = normalize_row(
+        {
+            "question_text": "Pick one",
+            "combined_options": "o1;o2;o3;o4;o5;o6;o7",
+            "correct_answer": "A",
+        }
+    )
+    r = validate_row(raw)
+    assert r.status == ImportItemStatus.ok, r.error_message
+    assert dict(r.canonical["options"])["G"] == "o7"
+
+
+def test_correct_answer_numeric_nine_out_of_range() -> None:
+    """1–8 map to A–H; 9 is past the cap."""
+    row = _good_row()
+    row["correct_answer"] = "9"
+    r = validate_row(row)
+    assert r.status == ImportItemStatus.error
+    assert "out of range" in (r.error_message or "").lower()
+
+
+def test_correct_answer_bd_contiguous_expands() -> None:
+    row = _good_row()
+    row["option_d"] = "fourth"
+    row["correct_answer"] = "BD"
+    r = validate_row(row)
+    assert r.status == ImportItemStatus.ok
+    assert set(r.canonical["correct_answer"]) == {"B", "D"}
+
+
 # ---------------------------------------------------------------------------
 # question_type alias normalization (Vietnamese XLSX dump #142 + friends)
 # ---------------------------------------------------------------------------
@@ -358,6 +390,31 @@ def test_content_hash_changes_on_question_text_edit() -> None:
     a = import_dedup.content_hash({"question_text": "Q?", "options": [("A", "x")]})
     b = import_dedup.content_hash({"question_text": "Q??", "options": [("A", "x")]})
     assert a != b
+
+
+def test_find_near_duplicates_skips_short_text() -> None:
+    """No DB call when text is below the min-length guard."""
+
+    class _ExplodingSession:
+        def execute(self, *_a, **_k):
+            raise AssertionError("execute should not be called for short text")
+
+    out = import_dedup.find_near_duplicates(
+        _ExplodingSession(),
+        exam_id=1,
+        question_text="too short",
+    )
+    assert out == []
+
+
+def test_near_duplicate_match_to_dict_rounds_similarity() -> None:
+    m = import_dedup.NearDuplicateMatch(
+        question_id=42, similarity=0.7777777, snippet="x" * 200
+    )
+    d = m.to_dict()
+    assert d["question_id"] == 42
+    assert d["similarity"] == 0.778  # rounded to 3 dp
+    assert len(d["snippet"]) == 120  # truncated
 
 
 # ---------------------------------------------------------------------------
@@ -660,3 +717,169 @@ def test_required_mapping_reports_question_text_missing() -> None:
     )
     assert "question_text" in missing
     assert "correct_answer" not in missing
+
+
+# ---------------------------------------------------------------------------
+# Bug 1 — A–H option support (7- and 8-option rows)
+# ---------------------------------------------------------------------------
+
+
+def test_validate_seven_option_row_with_correct_seven() -> None:
+    """7 separate option columns + correct_answer=7 → resolves to G, OK."""
+    raw = {
+        "question_text": "Pick the seventh option (numeric correct=7).",
+        "option_a": "alpha",
+        "option_b": "beta",
+        "option_c": "gamma",
+        "option_d": "delta",
+        "option_e": "epsilon",
+        "option_f": "zeta",
+        "option_g": "eta",
+        "correct_answer": "7",
+    }
+    r = validate_row(raw)
+    assert r.status == ImportItemStatus.ok, r.error_message
+    assert r.canonical["correct_answer"] == ["G"]
+    assert dict(r.canonical["options"])["G"] == "eta"
+
+
+def test_validate_eight_option_row_with_correct_h() -> None:
+    """8 separate option columns + correct_answer=H → OK (mirrors import #142 row 9)."""
+    raw = {
+        "question_text": "Pick the eighth option.",
+        "option_a": "a", "option_b": "b", "option_c": "c", "option_d": "d",
+        "option_e": "e", "option_f": "f", "option_g": "g", "option_h": "h",
+        "correct_answer": "H",
+    }
+    r = validate_row(raw)
+    assert r.status == ImportItemStatus.ok, r.error_message
+    assert r.canonical["correct_answer"] == ["H"]
+    assert dict(r.canonical["options"])["H"] == "h"
+
+
+def test_validate_combined_options_eight_pieces_split_to_h() -> None:
+    """combined_options with 8 pieces splits into option_a..option_h."""
+    raw = normalize_row(
+        {
+            "question_text": "Pick anything",
+            "combined_options": "o1;o2;o3;o4;o5;o6;o7;o8",
+            "correct_answer": "8",
+        }
+    )
+    r = validate_row(raw)
+    assert r.status == ImportItemStatus.ok, r.error_message
+    assert r.canonical["correct_answer"] == ["H"]
+    assert dict(r.canonical["options"])["H"] == "o8"
+
+
+def test_validate_combined_options_nine_pieces_overflows() -> None:
+    """9+ split pieces still error — A–H is the new hard cap."""
+    raw = normalize_row(
+        {
+            "question_text": "Too many options",
+            "combined_options": ";".join(f"o{i}" for i in range(1, 10)),
+            "correct_answer": "A",
+        }
+    )
+    r = validate_row(raw)
+    assert r.status == ImportItemStatus.error
+    assert r.error_message and "9" in r.error_message
+
+
+def test_correct_answer_contiguous_letters_acgh_expands() -> None:
+    """`ACGH` (multi-correct shorthand spanning new letters) expands to A,C,G,H."""
+    raw = {
+        "question_text": "Multi correct across A–H",
+        "option_a": "a", "option_b": "b", "option_c": "c", "option_d": "d",
+        "option_e": "e", "option_f": "f", "option_g": "g", "option_h": "h",
+        "correct_answer": "ACGH",
+    }
+    r = validate_row(raw)
+    assert r.status == ImportItemStatus.ok, r.error_message
+    assert r.canonical["correct_answer"] == ["A", "C", "G", "H"]
+    assert r.canonical["question_type"] == "multiple"
+
+
+def test_excel_parser_alias_includes_option_g_and_h() -> None:
+    """auto_map() picks up `optionG` / `optionH` headers."""
+    m = auto_map(["Question", "Option G", "Option H", "Correct"])
+    assert m["Option G"] == "option_g"
+    assert m["Option H"] == "option_h"
+
+
+# ---------------------------------------------------------------------------
+# Bug 2 — content_hash canonicalisation
+# ---------------------------------------------------------------------------
+
+
+def test_content_hash_stable_across_whitespace_and_case() -> None:
+    """Same question + options modulo case + extra whitespace → same hash."""
+    a = import_dedup.content_hash(
+        {
+            "question_text": "What does VPN stand for?",
+            "options": [("A", "Virtual Private Network"), ("B", "Voice Packet Node")],
+        }
+    )
+    b = import_dedup.content_hash(
+        {
+            "question_text": "  what does   VPN stand for? ",
+            "options": [("A", "VIRTUAL  PRIVATE NETWORK"), ("B", "voice packet node ")],
+        }
+    )
+    assert a == b
+
+
+def test_content_hash_stable_across_diacritics() -> None:
+    """Accented vs ASCII transliteration → same hash."""
+    a = import_dedup.content_hash(
+        {"question_text": "Câu hỏi mẫu", "options": [("A", "Đáp án A"), ("B", "Đáp án B")]}
+    )
+    b = import_dedup.content_hash(
+        {"question_text": "Cau hoi mau", "options": [("A", "dap an a"), ("B", "dap an b")]}
+    )
+    assert a == b
+
+
+def test_content_hash_changes_when_options_differ_meaningfully() -> None:
+    """Genuine option-set edits must produce a different hash."""
+    a = import_dedup.content_hash(
+        {"question_text": "Q?", "options": [("A", "alpha"), ("B", "beta")]}
+    )
+    b = import_dedup.content_hash(
+        {"question_text": "Q?", "options": [("A", "alpha"), ("B", "gamma")]}
+    )
+    assert a != b
+
+
+# ---------------------------------------------------------------------------
+# Bug 3 — XLSX header normalizer + graceful unmapped behaviour
+# ---------------------------------------------------------------------------
+
+
+def test_auto_map_unknown_headers_resolve_to_none_not_error() -> None:
+    """Unknown headers map to None — they don't crash auto_map or fail rows.
+
+    Required-field check is the gate; unknown columns are silently dropped at
+    parse time so the row is still validated against whatever was mapped.
+    """
+    m = auto_map(["Question", "MyCustomColumnXYZ", "Correct"])
+    assert m["Question"] == "question_text"
+    assert m["Correct"] == "correct_answer"
+    assert m["MyCustomColumnXYZ"] is None
+
+
+def test_auto_map_uppercase_english_headers() -> None:
+    """`QUESTION` / `CORRECT ANSWER` (unusual casing + spaces) map correctly."""
+    m = auto_map(["QUESTION", "CORRECT ANSWER", "OPTION A", "OPTION B"])
+    assert m["QUESTION"] == "question_text"
+    assert m["CORRECT ANSWER"] == "correct_answer"
+    assert m["OPTION A"] == "option_a"
+    assert m["OPTION B"] == "option_b"
+
+
+def test_auto_map_choice_and_answerkey_aliases() -> None:
+    """`Choice A` and `Answer Key` resolve correctly."""
+    m = auto_map(["Choice A", "Choice B", "Answer Key"])
+    assert m["Choice A"] == "option_a"
+    assert m["Choice B"] == "option_b"
+    assert m["Answer Key"] == "correct_answer"

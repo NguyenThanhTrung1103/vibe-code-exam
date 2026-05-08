@@ -1,68 +1,95 @@
-{% extends "base.html" %}
+{% extends "public/_layout.html" %}
 {% block title %}{{ exam.name }} — {{ provider.name }}{% endblock %}
 {% block content %}
+<section class="py-xl max-w-container-max mx-auto px-lg">
+  <nav class="text-caption text-on-surface-variant mb-md" aria-label="Breadcrumb">
+    <a href="/vendors" class="hover:text-primary">Vendors</a> ›
+    <a href="/vendors/{{ provider.slug }}" class="hover:text-primary">{{ provider.name }}</a> ›
+    <span class="text-on-surface">{{ exam.name }}</span>
+  </nav>
 
-<nav class="breadcrumb">
-  <a href="/vendors">Vendors</a> ›
-  <a href="/vendors/{{ provider.slug }}">{{ provider.name }}</a> ›
-  <span>{{ exam.name }}</span>
-</nav>
+  <header class="mb-lg pb-lg border-b border-outline-variant">
+    <h1 class="font-h1 text-h1 text-on-surface mb-xs">{{ exam.name }}</h1>
+    {% if exam.code %}
+      <p class="font-body-md text-on-surface-variant">
+        Code: <code class="bg-surface-container-low px-sm py-0.5 rounded font-mono text-[14px]">{{ exam.code }}</code>
+      </p>
+    {% endif %}
+    <p class="font-body-md text-on-surface mt-xs"><strong>{{ course.name }}</strong> · {{ provider.name }}</p>
+    {% if exam.description %}
+      <p class="font-body-md text-on-surface-variant mt-md max-w-3xl">{{ exam.description }}</p>
+    {% endif %}
+  </header>
 
-<header class="exam-header">
-  <h1>{{ exam.name }}</h1>
-  {% if exam.code %}<p class="exam-code">Code: <code>{{ exam.code }}</code></p>{% endif %}
-  <p class="exam-course"><strong>{{ course.name }}</strong> · {{ provider.name }}</p>
-  {% if exam.description %}<p>{{ exam.description }}</p>{% endif %}
-</header>
-
-<section class="exam-meta">
-  <dl>
+  <section class="grid grid-cols-2 md:grid-cols-4 gap-md mb-xl">
     {% if exam.time_limit_seconds %}
-      <dt>Time limit</dt>
-      <dd>{{ (exam.time_limit_seconds // 60) }} min</dd>
+      <div class="bg-surface-container-lowest p-lg rounded-xl border border-outline-variant">
+        <p class="text-caption text-on-surface-variant mb-xs">Time limit</p>
+        <p class="font-h3 text-h3 text-on-surface">{{ (exam.time_limit_seconds // 60) }} min</p>
+      </div>
     {% endif %}
     {% if exam.passing_score_percent is not none %}
-      <dt>Passing score</dt>
-      <dd>{{ exam.passing_score_percent }}%</dd>
+      <div class="bg-surface-container-lowest p-lg rounded-xl border border-outline-variant">
+        <p class="text-caption text-on-surface-variant mb-xs">Passing score</p>
+        <p class="font-h3 text-h3 text-on-surface">{{ exam.passing_score_percent }}%</p>
+      </div>
     {% endif %}
-    <dt>Question count (published)</dt>
-    <dd>{{ published_question_count }}</dd>
-    {% if exam.last_verified_at %}
-      <dt>Last verified</dt>
-      <dd>{{ exam.last_verified_at.isoformat() }}</dd>
-    {% endif %}
-  </dl>
-</section>
-
-{% if topics %}
-<section class="exam-topics">
-  <h2>Topics</h2>
-  <ul>
-    {% for t in topics %}
-      <li>{{ t.name }}{% if t.weight is not none %} <small>(weight {{ t.weight }})</small>{% endif %}</li>
-    {% endfor %}
-  </ul>
-</section>
-{% endif %}
-
-<section class="exam-cta">
-  {% if published_question_count == 0 %}
-    <div class="badge badge-soon" role="status">
-      Coming soon — No questions available yet.
+    <div class="bg-surface-container-lowest p-lg rounded-xl border border-outline-variant">
+      <p class="text-caption text-on-surface-variant mb-xs">Published questions</p>
+      <p class="font-h3 text-h3 text-on-surface">{{ published_question_count }}</p>
     </div>
-    <p>This exam is published but does not have any questions yet. Check back later.</p>
-  {% else %}
-    {% if current_user %}
-      <form method="post" action="/attempts/start" style="display:inline">
-        <input type="hidden" name="csrf_token" value="{{ csrf_token if csrf_token is defined else '' }}">
-        <input type="hidden" name="exam_id" value="{{ exam.id }}">
-        <button class="btn" type="submit" name="mode" value="practice">Start Practice</button>
-        <button class="btn" type="submit" name="mode" value="exam">Start Exam</button>
-      </form>
-    {% else %}
-      <a class="btn" href="/auth/login?next=/exams/{{ provider.slug }}/{{ exam.slug }}">Log in to start an attempt</a>
+    {% if exam.last_verified_at %}
+      <div class="bg-surface-container-lowest p-lg rounded-xl border border-outline-variant">
+        <p class="text-caption text-on-surface-variant mb-xs">Last verified</p>
+        <p class="font-h3 text-h3 text-on-surface">{{ exam.last_verified_at.strftime('%Y-%m-%d') }}</p>
+      </div>
     {% endif %}
-  {% endif %}
-</section>
+  </section>
 
+  {% if topics %}
+    <section class="mb-xl">
+      <h2 class="font-h2 text-h2 text-on-surface mb-md">Topics</h2>
+      <ul class="grid grid-cols-1 md:grid-cols-2 gap-sm">
+        {% for t in topics %}
+          <li class="bg-surface-container-lowest px-lg py-md rounded-lg border border-outline-variant flex items-center justify-between">
+            <span class="font-body-md text-on-surface">{{ t.name }}</span>
+            {% if t.weight is not none %}
+              <span class="text-caption text-on-surface-variant">weight {{ t.weight }}</span>
+            {% endif %}
+          </li>
+        {% endfor %}
+      </ul>
+    </section>
+  {% endif %}
+
+  <section class="bg-surface-container-low p-lg rounded-xl border border-outline-variant">
+    {% if published_question_count == 0 %}
+      <div class="inline-flex items-center gap-sm bg-tertiary-fixed text-on-tertiary-fixed-variant px-md py-sm rounded-full text-label-md font-label-md mb-sm" role="status">
+        <span class="material-symbols-outlined text-[18px]">schedule</span>
+        Coming soon — no questions yet
+      </div>
+      <p class="text-on-surface-variant">This exam is published but has no questions yet. Check back later.</p>
+    {% else %}
+      {% if current_user %}
+        <form method="post" action="/attempts/start" class="flex flex-wrap items-center gap-md">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token if csrf_token is defined else '' }}" />
+          <input type="hidden" name="exam_id" value="{{ exam.id }}" />
+          <button class="inline-flex items-center gap-xs bg-primary hover:bg-primary-container text-on-primary font-label-md px-lg py-md rounded-lg transition-all active:scale-[0.98] shadow-md"
+                  type="submit" name="mode" value="practice">
+            <span class="material-symbols-outlined text-[18px]">play_arrow</span> Start practice
+          </button>
+          <button class="inline-flex items-center gap-xs bg-surface-container-high hover:bg-surface-container-highest text-on-surface font-label-md px-lg py-md rounded-lg transition-all active:scale-[0.98] border border-outline-variant"
+                  type="submit" name="mode" value="exam">
+            <span class="material-symbols-outlined text-[18px]">timer</span> Start full exam
+          </button>
+        </form>
+      {% else %}
+        <a class="inline-flex items-center gap-xs bg-primary hover:bg-primary-container text-on-primary font-label-md px-lg py-md rounded-lg transition-all shadow-md"
+           href="/auth/login?next=/exams/{{ provider.slug }}/{{ exam.slug }}">
+          <span class="material-symbols-outlined text-[18px]">login</span> Log in to start an attempt
+        </a>
+      {% endif %}
+    {% endif %}
+  </section>
+</section>
 {% endblock %}

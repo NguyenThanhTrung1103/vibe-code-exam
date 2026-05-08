@@ -1,58 +1,128 @@
-{% extends "base.html" %}
+{% extends "public/_layout.html" %}
 {% block title %}Exam Platform — practice for vendor certifications{% endblock %}
 {% block content %}
 
-<section class="hero">
-  <h1>Practice. Verify. Pass.</h1>
-  <p class="hero-tagline">
-    Real exam-style questions, grouped by vendor and product.
-  </p>
+{# Hero — search + brand promise #}
+<section class="relative overflow-hidden bg-surface py-xl md:py-[100px] border-b border-outline-variant/30">
+  <div class="absolute inset-0 z-0 opacity-10 pointer-events-none" aria-hidden="true">
+    <div class="absolute top-0 right-0 w-[600px] h-[600px] bg-primary rounded-full blur-[120px] -mr-[300px] -mt-[300px]"></div>
+    <div class="absolute bottom-0 left-0 w-[400px] h-[400px] bg-secondary rounded-full blur-[100px] -ml-[200px] -mb-[200px]"></div>
+  </div>
+  <div class="max-w-container-max mx-auto px-lg relative z-10 text-center">
+    <div class="inline-flex items-center gap-sm bg-secondary-container text-on-secondary-fixed px-sm py-1 rounded-full text-caption mb-md border border-outline-variant/50">
+      <span class="flex h-2 w-2 rounded-full bg-primary animate-pulse"></span>
+      Updated for the latest exam standards
+    </div>
+    <h1 class="font-h1 text-h1 md:text-[64px] leading-tight mb-md text-on-surface">
+      Practice. Verify. <span class="text-primary">Pass.</span>
+    </h1>
+    <p class="font-body-lg text-body-lg text-on-surface-variant max-w-2xl mx-auto mb-xl">
+      Real exam-style questions, grouped by vendor and product.
+    </p>
 
-  <form class="search-form"
-        hx-get="/search/exams"
-        hx-target="#search-results"
-        hx-trigger="submit, keyup changed delay:300ms from:input[name='q']">
-    <input type="search" name="q" placeholder="Search vendor or exam (e.g. NSE4)…" maxlength="128">
-    <button class="btn" type="submit">Search</button>
-  </form>
-  <div id="search-results" aria-live="polite"></div>
+    <form class="max-w-3xl mx-auto"
+          hx-get="/search/exams"
+          hx-target="#search-results"
+          hx-trigger="submit, keyup changed delay:300ms from:input[name='q']">
+      <div class="relative group">
+        <div class="absolute inset-y-0 left-0 pl-lg flex items-center pointer-events-none">
+          <span class="material-symbols-outlined text-outline">search</span>
+        </div>
+        <input class="block w-full pl-[56px] pr-[140px] py-lg bg-surface-container-lowest border border-outline-variant rounded-xl shadow-sm focus:ring-4 focus:ring-primary/10 focus:border-primary transition-all font-body-md"
+               name="q" type="search" maxlength="128"
+               placeholder="Search vendor or exam (e.g. NSE4)…" />
+        <div class="absolute inset-y-0 right-0 flex items-center pr-sm">
+          <button class="bg-primary hover:bg-primary-container text-on-primary font-label-md px-lg py-md rounded-lg transition-all active:scale-[0.98] shadow-md"
+                  type="submit">Search</button>
+        </div>
+      </div>
+    </form>
+    <div id="search-results" class="mt-md text-left max-w-3xl mx-auto" aria-live="polite"></div>
+  </div>
 </section>
 
-<section class="vendor-grid">
-  <h2>Vendors</h2>
+{# Vendor grid — first 12 providers with at least one published exam #}
+<section class="py-xl max-w-container-max mx-auto px-lg">
+  <div class="flex flex-col md:flex-row md:items-end md:justify-between gap-md mb-lg border-b border-outline-variant pb-md">
+    <div>
+      <h2 class="font-h2 text-h2 text-on-surface mb-xs">Vendors</h2>
+      <p class="text-on-surface-variant font-body-md">Browse certification paths by technology providers.</p>
+    </div>
+    <a class="text-primary font-label-md hover:underline flex items-center gap-xs" href="/vendors">
+      View all vendors <span class="material-symbols-outlined text-[18px]">arrow_forward</span>
+    </a>
+  </div>
   {% if not providers %}
-    <p>No published exams yet — check back soon.</p>
+    <p class="text-on-surface-variant">No published exams yet — check back soon.</p>
   {% else %}
-    <ul class="card-grid">
+    <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-md">
       {% for p in providers %}
-        <li class="card">
-          <a href="/vendors/{{ p.slug }}">
-            {% if p.logo_url %}<img src="{{ p.logo_url }}" alt="{{ p.name }} logo">{% endif %}
-            <strong>{{ p.name }}</strong>
-          </a>
-        </li>
+        <a class="group bg-surface-container-lowest p-lg rounded-xl border border-outline-variant hover:border-primary hover:shadow-lg transition-all text-center"
+           href="/vendors/{{ p.slug }}">
+          <div class="aspect-square bg-surface-container-low rounded-lg mb-md flex items-center justify-center p-md overflow-hidden">
+            {% if p.logo_url %}
+              <img alt="{{ p.name }} logo"
+                   class="max-w-full max-h-full grayscale group-hover:grayscale-0 transition-all object-contain"
+                   src="{{ p.logo_url }}" />
+            {% else %}
+              <span class="font-h1 text-[32px] text-primary/30 group-hover:text-primary transition-colors">{{ p.name[0] | upper }}</span>
+            {% endif %}
+          </div>
+          <span class="font-h3 text-[16px] text-on-surface group-hover:text-primary transition-colors">{{ p.name }}</span>
+        </a>
       {% endfor %}
-    </ul>
-    <p><a href="/vendors">All vendors →</a></p>
+    </div>
   {% endif %}
 </section>
 
-<section class="popular-exams">
-  <h2>Popular exams</h2>
-  {% if not popular_exams %}
-    <p>Nothing published yet.</p>
-  {% else %}
-    <ul>
-      {% for exam, course, provider in popular_exams %}
-        <li>
-          <a href="/exams/{{ provider.slug }}/{{ exam.slug }}">
-            {{ provider.name }} · {{ exam.code or exam.name }}
+{# Popular exams — last-verified-first ordering, see app/routers/public/home.py #}
+<section class="py-xl bg-surface-container-low">
+  <div class="max-w-container-max mx-auto px-lg">
+    <div class="flex items-center justify-between mb-lg">
+      <h2 class="font-h2 text-h2 text-on-surface">Popular exams</h2>
+    </div>
+    {% if not popular_exams %}
+      <p class="text-on-surface-variant">Nothing published yet.</p>
+    {% else %}
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-md">
+        {% for exam, course, provider in popular_exams %}
+          <a class="bg-surface-container-lowest p-lg rounded-xl border border-outline-variant hover:shadow-md hover:border-primary/40 transition-all flex items-center gap-lg"
+             href="/exams/{{ provider.slug }}/{{ exam.slug }}">
+            <div class="w-16 h-16 bg-primary/5 rounded-lg flex-shrink-0 flex items-center justify-center text-primary">
+              <span class="material-symbols-outlined text-[32px]">school</span>
+            </div>
+            <div class="flex-grow min-w-0">
+              <span class="text-caption font-label-md text-primary bg-primary/10 px-sm py-0.5 rounded mb-xs inline-block">{{ provider.name }}</span>
+              <h3 class="font-h3 text-h3 text-on-surface truncate">{{ exam.code or exam.name }}</h3>
+              <p class="font-body-md text-on-surface-variant truncate">{{ course.name }}</p>
+            </div>
+            <span class="material-symbols-outlined text-on-surface-variant flex-shrink-0">play_arrow</span>
           </a>
-          <small>— {{ course.name }}</small>
-        </li>
-      {% endfor %}
-    </ul>
-  {% endif %}
+        {% endfor %}
+      </div>
+    {% endif %}
+  </div>
+</section>
+
+{# Trust strip — static value props #}
+<section class="py-xl max-w-container-max mx-auto px-lg">
+  <div class="grid grid-cols-1 md:grid-cols-3 gap-xl text-center">
+    <div class="p-lg">
+      <span class="material-symbols-outlined text-primary text-[40px] mb-md">verified</span>
+      <h4 class="font-h3 text-h3 mb-xs">Verified answers</h4>
+      <p class="font-body-md text-on-surface-variant">Questions reviewed against vendor docs to keep answers accurate.</p>
+    </div>
+    <div class="p-lg">
+      <span class="material-symbols-outlined text-primary text-[40px] mb-md">update</span>
+      <h4 class="font-h3 text-h3 mb-xs">Regular updates</h4>
+      <p class="font-body-md text-on-surface-variant">Question banks refreshed as new objectives ship and old ones retire.</p>
+    </div>
+    <div class="p-lg">
+      <span class="material-symbols-outlined text-primary text-[40px] mb-md">psychology</span>
+      <h4 class="font-h3 text-h3 mb-xs">Exam simulator</h4>
+      <p class="font-body-md text-on-surface-variant">Timed practice that mirrors the real exam interface and pace.</p>
+    </div>
+  </div>
 </section>
 
 {% endblock %}

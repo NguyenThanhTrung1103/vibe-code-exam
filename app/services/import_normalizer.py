@@ -31,8 +31,8 @@ _LINE_RUN = re.compile(r"\n{3,}")
 
 # Strips a leading ordinal label like "A.", "A)", "A:", "A-", "1)", "1.", etc.
 # from the start of a single split-out option text. Lets dump-style cells
-# such as "A. Foo; B. Bar" yield clean "Foo" / "Bar".
-_OPTION_PREFIX_RE = re.compile(r"^\s*[A-Fa-f1-6]\s*[\.\)\:\-]\s*")
+# such as "A. Foo; B. Bar" yield clean "Foo" / "Bar". Supports A–H / 1–8.
+_OPTION_PREFIX_RE = re.compile(r"^\s*[A-Ha-h1-8]\s*[\.\)\:\-]\s*")
 # Splits a combined-options cell on `;` (Latin), `；` (fullwidth), or any
 # newline run. Whitespace around each piece is trimmed by the caller.
 _COMBINED_SPLIT_RE = re.compile(r"[;；\r\n]+")
@@ -67,7 +67,7 @@ def normalize_row(raw: dict[str, Any]) -> dict[str, Any]:
 
     Post-step: if `combined_options` is mapped (a single dump-style cell that
     holds all options separated by `;` / `；` / newlines), split it into
-    `option_a` ... `option_f` slots that the validator already understands.
+    `option_a` ... `option_h` slots that the validator already understands.
     Individual `option_*` keys already present win over the split values.
     """
     out: dict[str, Any] = {}
@@ -82,7 +82,14 @@ def normalize_row(raw: dict[str, Any]) -> dict[str, Any]:
     combined = out.pop("combined_options", None)
     if combined:
         parts = split_combined_options(str(combined))
-        for label, text in zip(("a", "b", "c", "d", "e", "f"), parts, strict=False):
+        # Validator supports A–H (eight slots). Surface overflow explicitly
+        # instead of silently truncating extra list items.
+        if len(parts) > 8:
+            out["combined_options_overflow"] = len(parts)
+            parts = parts[:8]
+        for label, text in zip(
+            ("a", "b", "c", "d", "e", "f", "g", "h"), parts, strict=False
+        ):
             key = f"option_{label}"
             if not out.get(key):
                 out[key] = text

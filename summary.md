@@ -80,6 +80,84 @@ The connectivity guard is part of the standard pre-deploy preflight.
   admin on the LXC is `admin@local.test`; the password is **not**
   in the repo. To rotate, ssh in and run `create_admin.py --update`.
 
+### 3a. Admin dashboard & navigation (2026-05-04)
+
+**Entry point:** `GET /admin` — **Dashboard** (router
+`app/routers/admin/dashboard.py`).
+
+**Global admin nav (no URL memorization):** When an admin visits any
+path under `/admin/*`, the site header shows a second bar
+(`admin/_nav.html`) with: **Dashboard** · **Import dump** ·
+**Manage exams** · **Review questions** · **Catalog** (providers).
+The top “Admin” link in the public header points to `/admin` (not
+`/admin/providers`).
+
+**What the Dashboard shows**
+
+| Area | Purpose |
+|---|---|
+| **Three action cards** | Deep links to `/admin/imports`, `/admin/exams`, `/admin/questions`. |
+| **Import alert strip** | If any of the last 10 imports has staged **error** rows or `failed_questions` on the header, a red alert lists import **#id** with links to `preview?filter=errors` when useful. If clean, a green “no import errors” line. |
+| **Tab: Recent imports** | Compact table: import **#**, dump label, **target exam**, **exam publish status** (draft/published/…), **import pipeline status**, **in bank** count, **error** count, link to **Review** by `source_import_id`. |
+| **Tab: Exams & status** | Last 12 exams by `updated_at`: catalog path, **slug**, **publish status**, actions — **Review questions**, **Publish** (HTMX + reload, draft only), **Practice preview** (admin, draft), **Open public exam** (published only). |
+
+**CSRF:** `admin/_layout.html` renders a single hidden `#page-csrf`
+for pages that extend it; catalog pages that still extend `base.html`
+keep their own `page-csrf` for HTMX on those forms.
+
+### 3b. Import / exam UX & backend improvements (same session)
+
+**Recent imports (full table on `/admin/imports`, not only Dashboard)**
+
+- Columns tie each import to **Provider · Course · Exam · slug** and
+  show **two** statuses: **target exam** (`Exam.publish_status`:
+  draft / published / archived) and **import pipeline**
+  (`Import.status`: uploaded, normalized, ready_to_publish, …).
+- Staged breakdown from `import_items`: **OK / Err / Dup**; err cells
+  highlighted; link **View errors** when `Err > 0`.
+- `combined_options` with **more than six** split pieces no longer
+  fails silently: `combined_options_overflow` + validator error
+  (A–F cap). Numeric `correct_answer` out of **1..6** gets an explicit
+  range message.
+- **Publish exam** + **Practice preview (admin)** on the import row
+  when the **target exam** is still **draft**; **Open public exam**
+  when **published** (plus **Review questions** when the bank has
+  rows for that import).
+
+**Admin practice preview (draft / private exam, no public leak)**
+
+- `app/services/question_selector.py` —
+  `list_questions_for_admin_preview()` = all non-deleted,
+  non-retired questions for an exam (any `QuestionStatus`, e.g.
+  `imported`).
+- `app/services/attempt_service.py` —
+  `start_admin_preview_attempt()` — **admin role only**; bypasses
+  “exam must be published” used by `start_attempt()`.
+- `POST /admin/exams/{exam_id}/practice-preview/start` (CSRF +
+  `RL_ATTEMPT_START`) → redirect to `/attempts/{id}/q/1`.
+- Regular `/attempts/start` and public exam pages remain restricted
+  to **published** exams and **published** questions where
+  applicable — draft exams are **not** discoverable on the public
+  catalog.
+
+**Practice / review polish**
+
+- After **Submit**, redirect to `/attempts/{id}/result` (not the old
+  placeholder-only submitted page); submitted stub still offers
+  result/review links.
+- `attempts/review_question.html` — if no stored explanation, show
+  **“Explanation is not available yet.”**
+
+**Tests:** `tests/test_admin_dashboard.py` (unauth GET `/admin` with
+`Accept: text/html` → login redirect). Import and practice real-DB
+tests updated where redirects changed.
+
+**Git (dashboard + nav):** commit `055c172` on `master`
+(`feat(admin): add dashboard at /admin with primary nav and
+snapshots`). **Note:** other local edits (imports table, practice
+service, etc.) may still be uncommitted in the same clone — run
+`git status` before assuming a clean tree.
+
 ---
 
 ## 4. Import pipeline overview
@@ -397,14 +475,16 @@ via:
   significant deploy.
 - **Some imports are staged but not confirmed.** A `normalized`
   status means the operator still has to step through preview
-  and click Confirm. #142 in particular sits at `normalized`.
-- **Recent imports UI** has the new Imported / Review-questions
-  columns but might still feel cluttered on a small viewport.
-  Polish is welcome but not blocking.
-- **Practice / test-taking flow is not yet usable for guests.**
-  Authentication is required for every attempt today.
-- **Imported questions are in the bank but there is no admin "play
-  this dump as a test" CTA yet.** Phase 17 below.
+  and click Confirm. #142 in particular may still sit at
+  `normalized` until an operator confirms or skips rows.
+- **Wide Recent imports table on `/admin/imports`** uses horizontal
+  scroll on narrow screens; Dashboard offers a compact snapshot.
+- **Practice / test-taking flow is not yet usable for guests**
+  (no-login). **Admins** can use **Practice preview** on **draft**
+  exams from Dashboard or `/admin/exams` / import Done page.
+- **Learner-facing practice** still requires a **published** exam
+  and **published** questions on the public catalog — unchanged for
+  anonymous users.
 - **Excel rows with > 6 options error.** A–F is the storage cap.
   Row 9 of #142 is the canonical example.
 - **HTML explanations are not imported** unless the saved page
@@ -667,23 +747,24 @@ These rules are non-negotiable unless the operator approves explicitly:
 - **Milestone 1 import / parser:** done and deployed. Multi-format
   (XLSX / HTML / PDF / TXT) lands rows end-to-end. 137 / 138 / 139
   fixture imports green.
-- **Excel #142 mapping / validator fix:** done and deployed.
-  `combined_options` no longer trips the option_a/b required check;
-  `one_choice` / `multi_choice` / `choice` qtype values resolve;
-  numeric `1..6` correct_answer maps to A..F. #142 went from
-  40 errors → 4 ok + 35 duplicate + 1 legitimate edge-case error.
-- **Recent imports UX:** done and deployed. Imported count column
-  + Review questions link + duplicate-context banner on preview +
-  source_import context header on `/admin/questions`.
+- **Excel #142 mapping / validator fix:** done.
+  `combined_options` satisfies option columns; qtype / numeric
+  answers per § 6 in this doc.
+- **Recent imports + questions UX:** enriched table (exam/catalog
+  join, dual status, OK/Err/Dup, error links); questions filter
+  **Source import #**; `/admin` **Dashboard** + **primary admin nav**.
+- **Admin practice preview:** implemented for **draft** exams
+  (service + route); public catalog unchanged.
+- **Submit → result** and review **missing explanation** copy:
+  implemented.
 - **Browser QA:** **pending** operator verification (no admin
   cookie in agent sessions).
-- **Practice exam flow (admin or guest):** **not done yet.**
-  Phases 17–18.
-- **Result / review UX polish:** **not done yet.** Phase 19.
+- **Guest / no-login practice:** **not done** (Phase 18).
+- **Result / review UX (full Phase 19 scope):** partially improved;
+  further polish optional.
 - **CDEA / external enrichment:** **future phase.** Phases 20–21.
 - **Cleanup / ops hardening:** **future phase.** Phase 22.
 
-The repo is in a green state as of commit `9335105`: all 326 hermetic
-tests pass, mypy is clean, ruff is clean, and the LXC service is
-active with `db=ok` and `redis=ok`. The next operator can pick up at
-§ 12 with no surprises.
+Verify local tree with `git status` (dashboard shipped as `055c172`;
+other files may still be modified locally). Hermetic `pytest` green;
+run full lint/typecheck before deploy.

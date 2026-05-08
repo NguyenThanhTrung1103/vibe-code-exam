@@ -68,6 +68,14 @@ class Settings(BaseSettings):
     import_max_rows: int = Field(
         default=5000, description="Max data rows accepted from one workbook."
     )
+    import_near_duplicate_threshold: float = Field(
+        default=0.55,
+        description=(
+            "pg_trgm similarity threshold for non-blocking near-duplicate "
+            "warnings during import. Higher = stricter (fewer warnings). "
+            "Default 0.55 catches typos + paraphrases without flooding."
+        ),
+    )
 
     @property
     def is_local(self) -> bool:

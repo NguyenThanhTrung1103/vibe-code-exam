@@ -20,6 +20,8 @@ CANONICAL_FIELDS: tuple[str, ...] = (
     "option_d",
     "option_e",
     "option_f",
+    "option_g",
+    "option_h",
     "combined_options",
     "correct_answer",
     "explanation",
@@ -33,6 +35,8 @@ CANONICAL_FIELDS: tuple[str, ...] = (
     "vote_d",
     "vote_e",
     "vote_f",
+    "vote_g",
+    "vote_h",
     # Source-locator (stored in questions.source_locator JSONB):
     "source_url",
     "source_format",

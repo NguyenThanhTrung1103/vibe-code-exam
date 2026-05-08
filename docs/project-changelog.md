@@ -5,6 +5,96 @@ phase completion. Phase reports under `plans/reports/` are the
 authoritative source for the phase-level narrative; this file is the
 short-form digest.
 
+## 2026-05-04 (later) — Dev wipe + 4-dump auto-reimport on LXC
+
+**Status:** ✅ Re-imported all 4 sample dumps after a full wipe of the
+dev DB on `exam-lxc` (`exam_platform_db`). Dashboard + import-validator
+overflow detection deployed at the same time. See
+`plans/reports/fullstack-260504-2222-clear-and-reimport-dumps.md`.
+
+**Wipe** — single FK-safe transaction across `attempt_answers →
+attempts → community_discussion_sources → question_options →
+question_explanations → question_references → question_reports →
+evidence_fetch_logs → ai_verification_jobs →
+question_duplicate_groups → questions → import_items → imports`.
+Pre-wipe 13 imports / 405 items / 261 questions / 57 CDS → 0 / 0 / 0 / 0.
+
+**Reimport totals** — 259 questions across 4 imports (target exam=1
+NSE 4 — FortiGate Security, draft):
+
+| File | Format | Imported | Notes |
+|---|---|---|---|
+| `import_quiz_question_ccna_online.xlsx` | xlsx | 38/40 | 2 content-overflow rows (7 + 8 options exceed A–F schema) |
+| `57q_efw.html` | examtopics_html | 57/57 | + 57 CDS (URL, votes, external_question_id) |
+| `57q_efw(1).html` | examtopics_html | 0/57 | byte-identical copy → all 57 dedup'd by content_hash |
+| `*.pdf` (qblock) | qblock_pdf | 164/166 | 2 dedup hits |
+
+**Verification of edge cases**
+
+- **xlsx errors** — content overflow, not validator regression. Rows 6
+  (OSI 7 layers) and 9 (8 subnet masks, `correct_answer="7"`) genuinely
+  have more options than the A–F (6-slot) schema allows. Old behavior
+  silently truncated — new behavior surfaces an actionable error in
+  `import_items.error_message`. Path forward: admin trims the source
+  rows, or schema is extended A–H (separate decision).
+- **HTML duplicate** — verified byte-identical via SHA-256 (`6454d0e…`),
+  all 57 row-level `content_hash`es match within import 144. Dedup is
+  doing the right thing; not too aggressive.
+- **CDS** — 57/57 questions linked, with `source_url`,
+  `external_question_id`, `discussion_count`, `total_votes`, and
+  `vote_distribution` JSONB populated. `community_consensus=unknown` /
+  `community_answer=NULL` is expected — those are computed by a later
+  processing step, not the import.
+
+**Deploy** — tar+scp of 16 files (dashboard router/template, _nav,
+header.html, import normalizer/validator, exam/practice/import
+routers, related templates) to `/srv/exam-platform`.
+`systemctl restart exam-platform-web` → `active`. Tests on deployed
+code: `test_admin_dashboard.py` + `test_import_unit.py` (53 tests, all
+green).
+
+**Healthz (final)** — `{"status":"ok","db":"ok","redis":"ok"}`. All 7
+admin routes (dashboard, imports, exams, questions, filtered questions,
+preview-with-error-filter, exam publish POST) reachable; unauth returns
+303 → login as expected.
+
+---
+
+## 2026-05-04 — Admin dashboard, primary nav, import/exam UX
+
+**Status:** Dashboard + navigation merged on `master` as `055c172`
+(`feat(admin): add dashboard at /admin with primary nav and snapshots`).
+Additional import/practice/template edits may exist **only in local
+working trees** until committed — see `git status` / `summary.md` § 3a–3b.
+
+**Highlights**
+
+- **`GET /admin`** — Admin home with three action cards (Import dump,
+  Manage exams, Review questions), import **alert** strip (errors /
+  `failed_questions` in recent imports), **tabs** (Alpine) for compact
+  **Recent imports** and **Exams & status** with publish / practice
+  preview / public exam links where applicable.
+- **Primary admin navigation** — `admin/_nav.html` rendered under the
+  site header for any `/admin/*` path; top “Admin” link targets `/admin`.
+- **Recent imports page (`/admin/imports`)** — wide table: catalog
+  columns (provider, course, exam, slug), **exam** vs **import**
+  status, staged **OK / Err / Dup**, highlighted errors, contextual
+  actions (publish exam, practice preview, review, public link).
+- **Import validation** — `combined_options` overflow beyond A–F
+  surfaces an explicit error; clearer numeric `correct_answer`
+  out-of-range messaging.
+- **Admin practice preview** — `list_questions_for_admin_preview`,
+  `start_admin_preview_attempt`, `POST .../practice-preview/start`;
+  learners still use published exams only on the public catalog.
+- **Attempts UX** — submit redirects to **result**; review template
+  shows a fixed **missing explanation** sentence when appropriate.
+- **Tests** — `tests/test_admin_dashboard.py` (unauthenticated
+  dashboard → login redirect with `Accept: text/html`).
+
+**Docs:** `summary.md` § 3a–3b, § 11, § 17 updated for handoff.
+
+---
+
 ## 2026-05-02 — Multi-format admin import (Milestone 1)
 
 **Status:** ✅ Shipped to LXC `192.168.99.97`. 294 / 294 hermetic tests

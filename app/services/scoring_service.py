@@ -113,7 +113,7 @@ def _correct_labels_per_question(
 def compute_attempt_score(
     session: Session,
     *,
-    actor: User,
+    actor: User | None,
     request_id: str | None,
     attempt_id: int,
 ) -> AttemptScore:
@@ -156,10 +156,12 @@ def compute_attempt_score(
     attempt.score_percent = float(score_percent)
     attempt.passed = passed
 
+    actor_type = ActorType.user if actor is not None else ActorType.system
+    actor_id = actor.id if actor is not None else None
     write_audit_log(
         session,
-        actor_type=ActorType.user,
-        actor_id=actor.id,
+        actor_type=actor_type,
+        actor_id=actor_id,
         action=AuditAction.ATTEMPT_SCORED,
         entity_type="attempt",
         entity_id=attempt.id,

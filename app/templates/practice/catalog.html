@@ -1,0 +1,33 @@
+{% extends "practice/_layout.html" %}
+{% block title %}Practice exams · Exam Platform{% endblock %}
+{% block content %}
+<div class="exam-catalog">
+  <h1 class="catalog-heading">Practice exams</h1>
+  <p class="catalog-lede">Pick an exam below to start a free practice attempt — no login required.</p>
+
+  {% if not exams %}
+  <div class="empty-state" role="status">
+    <p>No published exams yet. Please check back later.</p>
+  </div>
+  {% else %}
+  <ul class="exam-card-list">
+    {% for ex in exams %}
+    <li class="exam-card">
+      <div>
+        <div class="exam-card-meta">{{ ex.provider }} · {{ ex.course }}</div>
+        <div class="exam-card-title">{{ ex.title }}</div>
+        <div class="exam-card-count">{{ ex.question_count }} question{{ '' if ex.question_count == 1 else 's' }}</div>
+      </div>
+      {% if ex.question_count > 0 %}
+      <form method="post" action="/practice/{{ ex.id }}/start" class="start-form">
+        <button type="submit" class="btn-start">Start Practice →</button>
+      </form>
+      {% else %}
+      <span class="muted">Coming soon</span>
+      {% endif %}
+    </li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+</div>
+{% endblock %}

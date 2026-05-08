@@ -13,9 +13,9 @@ from fastapi.templating import Jinja2Templates
 from sqlalchemy import func, select
 
 from app.auth.csrf import CSRF_FORM_FIELD, issue_csrf_token
-from app.auth.permissions import CurrentUser
+from app.auth.permissions import AttemptOwnerDep
 from app.deps import SessionDep
-from app.models.attempts import Attempt, AttemptAnswer
+from app.models.attempts import AttemptAnswer
 from app.models.catalog import Exam
 from app.models.questions import Question, QuestionExplanation, QuestionOption
 from app.paths import TEMPLATES_DIR
@@ -25,23 +25,14 @@ router = APIRouter(prefix="/attempts", tags=["attempts"])
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 
 
-def _owned_or_raise(session: SessionDep, attempt_id: int, user) -> Attempt:
-    a = session.get(Attempt, attempt_id)
-    if a is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
-    if a.user_id != user.id:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN)
-    return a
-
-
 @router.get("/{attempt_id}/result", response_class=HTMLResponse)
 def result(
     request: Request,
     attempt_id: int,
-    user: CurrentUser,
+    owner: AttemptOwnerDep,
     session: SessionDep,
 ) -> HTMLResponse:
-    attempt = _owned_or_raise(session, attempt_id, user)
+    attempt = owner.attempt
     if attempt.finished_at is None:
         # Result page only for finished attempts.
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="attempt not finished")
@@ -54,7 +45,8 @@ def result(
         request,
         "attempts/result.html",
         {
-            "current_user": user,
+            "current_user": owner.user,
+            "is_guest": owner.is_guest,
             "attempt": attempt,
             "exam": exam,
             "breakdown": breakdown,
@@ -70,10 +62,10 @@ _REVIEW_FILTERS = {"all", "wrong", "flagged"}
 def review_list(
     request: Request,
     attempt_id: int,
-    user: CurrentUser,
+    owner: AttemptOwnerDep,
     session: SessionDep,
 ) -> HTMLResponse:
-    attempt = _owned_or_raise(session, attempt_id, user)
+    attempt = owner.attempt
     if attempt.finished_at is None:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="attempt not finished")
 
@@ -96,7 +88,8 @@ def review_list(
         request,
         "attempts/review_list.html",
         {
-            "current_user": user,
+            "current_user": owner.user,
+            "is_guest": owner.is_guest,
             "attempt": attempt,
             "rows": rows,
             "filter": f if f in _REVIEW_FILTERS else "all",
@@ -109,10 +102,10 @@ def review_question(
     request: Request,
     attempt_id: int,
     order: int,
-    user: CurrentUser,
+    owner: AttemptOwnerDep,
     session: SessionDep,
 ) -> HTMLResponse:
-    attempt = _owned_or_raise(session, attempt_id, user)
+    attempt = owner.attempt
     if attempt.finished_at is None:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="attempt not finished")
 
@@ -154,7 +147,8 @@ def review_question(
         request,
         "attempts/review_question.html",
         {
-            "current_user": user,
+            "current_user": owner.user,
+            "is_guest": owner.is_guest,
             "attempt": attempt,
             "answer": answer,
             "question": question,

@@ -1,0 +1,33 @@
+{# Public top nav. Active state derived from `request.url.path`. #}
+{% set path = request.url.path if (request is defined and request.url.path is defined) else '/' %}
+<header class="bg-surface dark:bg-on-surface shadow-sm sticky top-0 z-50">
+  <div class="flex justify-between items-center px-lg py-md max-w-container-max mx-auto">
+    <a class="flex items-center gap-sm" href="/">
+      <div class="w-10 h-10 bg-primary flex items-center justify-center rounded-lg">
+        <span class="material-symbols-outlined text-on-primary" style="font-variation-settings: 'FILL' 1;">shield</span>
+      </div>
+      <span class="font-h3 text-h3 font-bold text-primary dark:text-primary-fixed-dim">Exam Platform</span>
+    </a>
+    <nav class="hidden md:flex items-center gap-xl">
+      <a href="/"
+         class="font-label-md text-label-md py-2 transition-colors {% if path == '/' %}text-primary dark:text-primary-fixed font-bold border-b-2 border-primary{% else %}text-on-secondary-container dark:text-secondary-fixed-dim hover:text-primary-container{% endif %}">Home</a>
+      <a href="/vendors"
+         class="font-label-md text-label-md py-2 transition-colors {% if path.startswith('/vendors') or path.startswith('/exams') %}text-primary dark:text-primary-fixed font-bold border-b-2 border-primary{% else %}text-on-secondary-container dark:text-secondary-fixed-dim hover:text-primary-container{% endif %}">Vendors</a>
+      {% if current_user and current_user.role.value == 'admin' %}
+        <a href="/admin"
+           class="font-label-md text-label-md py-2 transition-colors text-on-secondary-container dark:text-secondary-fixed-dim hover:text-primary-container">Admin</a>
+      {% endif %}
+    </nav>
+    <div class="flex items-center gap-md">
+      {% if current_user %}
+        <a href="/auth/logout"
+           class="material-symbols-outlined text-on-secondary-container p-2 rounded-full hover:bg-surface-container transition-colors"
+           title="Sign out ({{ current_user.email }})">account_circle</a>
+      {% else %}
+        <a href="/auth/login"
+           class="material-symbols-outlined text-on-secondary-container p-2 rounded-full hover:bg-surface-container transition-colors"
+           title="Sign in">account_circle</a>
+      {% endif %}
+    </div>
+  </div>
+</header>

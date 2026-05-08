@@ -67,6 +67,14 @@
       {% if imported > 0 %}
         <a class="btn-primary" href="/admin/questions?source_import_id={{ imp.id }}">Review imported questions</a>
       {% endif %}
+      {% if target_exam and imported > 0 %}
+        <form method="post" action="/admin/exams/{{ target_exam.id }}/practice-preview/start" style="display:inline;">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+          <button class="btn-primary" type="submit" title="Admin-only practice on draft exam; not exposed to anonymous users">
+            Start practice preview
+          </button>
+        </form>
+      {% endif %}
       {% if first_question_id %}
         <a class="btn-ghost" href="/admin/questions/{{ first_question_id }}/edit">Open first imported question</a>
         <a class="btn-ghost" href="/admin/questions/{{ first_question_id }}/community">Open Community tab</a>

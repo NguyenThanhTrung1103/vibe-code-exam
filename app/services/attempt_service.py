@@ -25,7 +25,8 @@ Caller commits.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+import math
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
@@ -40,11 +41,13 @@ from app.models.enums import (
     ActorType,
     AttemptMode,
     ExamPublishStatus,
+    UserRole,
 )
 from app.models.questions import Question, QuestionOption
 from app.models.users import User
 from app.services.question_selector import (
     list_published_active_questions,
+    list_questions_for_admin_preview,
     shuffled_question_ids,
 )
 
@@ -52,7 +55,7 @@ if TYPE_CHECKING:  # pragma: no cover
     pass
 
 
-_OPTION_LABELS_VALID = ("A", "B", "C", "D", "E", "F")
+_OPTION_LABELS_VALID = ("A", "B", "C", "D", "E", "F", "G", "H")
 
 
 # ---------------------------------------------------------------------------
@@ -99,6 +102,23 @@ class QuestionView:
     total: int  # total questions in this attempt
     selected_labels: list[str]
     time_remaining_seconds: int | None  # only set in exam mode
+    topic_label: str = "—"  # populated when caller resolves Topic; "—" otherwise
+
+
+@dataclass(slots=True)
+class PageView:
+    """Phase 18.6 — a page of N QuestionViews + page metadata."""
+
+    attempt: Attempt
+    page_num: int
+    page_size: int
+    total_questions: int
+    total_pages: int
+    page_start: int  # 1-based first global position on this page
+    page_end: int  # 1-based last global position on this page
+    views: list[QuestionView]
+    time_remaining_seconds: int | None  # only set in exam mode
+    revealed_positions: set[int] = field(default_factory=set)
 
 
 # ---------------------------------------------------------------------------
@@ -113,13 +133,38 @@ def _get_attempt_or_raise(session: Session, attempt_id: int) -> Attempt:
     return a
 
 
-def _check_owner(attempt: Attempt, user: User) -> None:
+def _check_owner(attempt: Attempt, user: User | None) -> None:
+    """Owner check that accepts both authenticated users and guests.
+
+    `user is None` means the route layer already proved guest ownership via
+    the signed cookie (`get_attempt_owner` in `app.auth.permissions`); in
+    that case the attempt must itself be a guest attempt (i.e. `user_id IS
+    NULL`). Anything else is an attempt to read someone else's attempt.
+    """
+    if user is None:
+        if attempt.user_id is not None:
+            raise AttemptForbiddenError(
+                f"attempt {attempt.id} is owned by a user, not a guest"
+            )
+        return
     if attempt.user_id != user.id:
         raise AttemptForbiddenError(f"attempt {attempt.id} does not belong to user {user.id}")
 
 
+def _audit_actor(user: User | None) -> tuple[ActorType, int | None]:
+    """Resolve `(actor_type, actor_id)` for audit-log writes.
+
+    Guests audit as `system` with `actor_id=None` — we don't have a stable
+    principal for them, and the existing schema has `ActorType.{user, ai,
+    system}` only.
+    """
+    if user is None:
+        return ActorType.system, None
+    return ActorType.user, user.id
+
+
 def _parse_selected_labels(raw: str | list[str] | None) -> list[str]:
-    """Normalise to sorted unique upper-case labels in {'A'..'F'}.
+    """Normalise to sorted unique upper-case labels in {'A'..'H'}.
 
     Accepts:
       None         → []          (clear selection)
@@ -258,6 +303,208 @@ def start_attempt(
     return attempt
 
 
+def start_guest_attempt(
+    session: Session,
+    *,
+    request_id: str | None,
+    exam_id: int,
+    guest_token: str,
+) -> Attempt:
+    """Phase 18 — start (or resume) a practice attempt for an anonymous guest.
+
+    Same shape as `start_attempt(actor=user, mode=practice)` but:
+      * `attempt.user_id = None`, `attempt.guest_token = guest_token`
+      * Resumes the most recent in-progress attempt for
+        `(exam_id, guest_token)` so refreshing the start endpoint with
+        the same cookie does not stack new attempts.
+      * Audits as `ActorType.system` because there is no stable principal.
+
+    Caller is responsible for verifying the cookie signature before
+    calling this. `guest_token` is the raw UUID, not the signed cookie.
+    """
+    if not guest_token:
+        raise AttemptValidationError("guest_token required")
+
+    exam = session.get(Exam, exam_id)
+    if exam is None or not _exam_publishable(exam):
+        raise AttemptValidationError(f"exam {exam_id} is not available for attempts")
+
+    existing = session.scalars(
+        select(Attempt)
+        .where(
+            and_(
+                Attempt.guest_token == guest_token,
+                Attempt.exam_id == exam_id,
+                Attempt.finished_at.is_(None),
+            )
+        )
+        .order_by(Attempt.id.desc())
+        .limit(1)
+    ).first()
+    if existing is not None:
+        write_audit_log(
+            session,
+            actor_type=ActorType.system,
+            actor_id=None,
+            action=AuditAction.ATTEMPT_RESUMED,
+            entity_type="attempt",
+            entity_id=existing.id,
+            new_value={"exam_id": exam_id, "mode": existing.mode.value, "guest": True},
+            request_id=request_id,
+        )
+        return existing
+
+    questions = list_published_active_questions(session, exam_id=exam_id)
+    if not questions:
+        raise AttemptValidationError("no questions available yet for this exam")
+
+    by_id = {q.id: q for q in questions}
+    ordered_ids = shuffled_question_ids(questions)
+
+    attempt = Attempt(
+        user_id=None,
+        guest_token=guest_token,
+        exam_id=exam_id,
+        exam_version=exam.exam_version,
+        mode=AttemptMode.practice,
+        started_at=datetime.now(UTC),
+        total_questions=len(ordered_ids),
+    )
+    session.add(attempt)
+    session.flush()
+
+    for idx, qid in enumerate(ordered_ids, start=1):
+        q = by_id[qid]
+        session.add(
+            AttemptAnswer(
+                attempt_id=attempt.id,
+                question_id=q.id,
+                question_version=q.question_version,
+                order_index=idx,
+                selected_options=None,
+                is_correct=None,
+                flagged=False,
+            )
+        )
+
+    write_audit_log(
+        session,
+        actor_type=ActorType.system,
+        actor_id=None,
+        action=AuditAction.ATTEMPT_STARTED,
+        entity_type="attempt",
+        entity_id=attempt.id,
+        new_value={
+            "exam_id": exam_id,
+            "mode": AttemptMode.practice.value,
+            "total_questions": len(ordered_ids),
+            "exam_version": exam.exam_version,
+            "guest": True,
+        },
+        request_id=request_id,
+    )
+    session.flush()
+    return attempt
+
+
+def start_admin_preview_attempt(
+    session: Session,
+    *,
+    actor: User,
+    request_id: str | None,
+    exam_id: int,
+) -> Attempt:
+    """Start (or resume) a practice attempt on a draft/private exam — admin only.
+
+    Bypasses `publish_status` / visibility checks so operators can smoke-test
+    freshly imported `QuestionStatus.imported` rows. Regular `/attempts/start`
+    remains restricted to published exams for non-preview flows.
+    """
+    if actor.role != UserRole.admin:
+        raise AttemptForbiddenError("practice preview is limited to administrators")
+
+    exam = session.get(Exam, exam_id)
+    if exam is None or exam.deleted_at is not None:
+        raise AttemptValidationError(f"exam {exam_id} not found")
+
+    mode = AttemptMode.practice
+    existing = session.scalars(
+        select(Attempt)
+        .where(
+            and_(
+                Attempt.user_id == actor.id,
+                Attempt.exam_id == exam_id,
+                Attempt.finished_at.is_(None),
+            )
+        )
+        .order_by(Attempt.id.desc())
+        .limit(1)
+    ).first()
+    if existing is not None:
+        write_audit_log(
+            session,
+            actor_type=ActorType.user,
+            actor_id=actor.id,
+            action=AuditAction.ATTEMPT_RESUMED,
+            entity_type="attempt",
+            entity_id=existing.id,
+            new_value={"exam_id": exam_id, "mode": existing.mode.value, "admin_preview": True},
+            request_id=request_id,
+        )
+        return existing
+
+    questions = list_questions_for_admin_preview(session, exam_id=exam_id)
+    if not questions:
+        raise AttemptValidationError("no questions in this exam yet for preview")
+
+    by_id = {q.id: q for q in questions}
+    ordered_ids = shuffled_question_ids(questions)
+
+    attempt = Attempt(
+        user_id=actor.id,
+        exam_id=exam_id,
+        exam_version=exam.exam_version,
+        mode=mode,
+        started_at=datetime.now(UTC),
+        total_questions=len(ordered_ids),
+    )
+    session.add(attempt)
+    session.flush()
+
+    for idx, qid in enumerate(ordered_ids, start=1):
+        q = by_id[qid]
+        session.add(
+            AttemptAnswer(
+                attempt_id=attempt.id,
+                question_id=q.id,
+                question_version=q.question_version,
+                order_index=idx,
+                selected_options=None,
+                is_correct=None,
+                flagged=False,
+            )
+        )
+
+    write_audit_log(
+        session,
+        actor_type=ActorType.user,
+        actor_id=actor.id,
+        action=AuditAction.ATTEMPT_STARTED,
+        entity_type="attempt",
+        entity_id=attempt.id,
+        new_value={
+            "exam_id": exam_id,
+            "mode": mode.value,
+            "total_questions": len(ordered_ids),
+            "exam_version": exam.exam_version,
+            "admin_preview": True,
+        },
+        request_id=request_id,
+    )
+    session.flush()
+    return attempt
+
+
 # ---------------------------------------------------------------------------
 # Question view
 # ---------------------------------------------------------------------------
@@ -266,7 +513,7 @@ def start_attempt(
 def get_question_view(
     session: Session,
     *,
-    actor: User,
+    actor: User | None,
     attempt_id: int,
     order: int,
 ) -> QuestionView:
@@ -304,7 +551,131 @@ def get_question_view(
         total=int(total),
         selected_labels=_parse_selected_labels(answer.selected_options),
         time_remaining_seconds=_time_remaining_seconds(session, a),
+        topic_label=_resolve_topic_label(session, q.topic_id),
     )
+
+
+def get_page_views(
+    session: Session,
+    *,
+    actor: User | None,
+    attempt_id: int,
+    page_num: int,
+    page_size: int = 5,
+    revealed_positions: set[int] | None = None,
+) -> PageView:
+    """Phase 18.6 — load a page of N consecutive questions for the practice UI.
+
+    Batches DB reads:
+      * one SELECT for the slice of attempt_answers
+      * one SELECT for all questions in the slice
+      * one SELECT for all options across those questions
+      * one SELECT for all referenced topics
+    so render cost is O(1) round-trips per page rather than per-question.
+    """
+    if page_size < 1:
+        raise AttemptValidationError("page_size must be >= 1")
+    a = _get_attempt_or_raise(session, attempt_id)
+    _check_owner(a, actor)
+
+    total = (
+        session.scalar(select(_count(AttemptAnswer.id)).where(AttemptAnswer.attempt_id == a.id))
+        or 0
+    )
+    total = int(total)
+    total_pages = max(1, math.ceil(total / page_size)) if total > 0 else 1
+    if page_num < 1 or page_num > total_pages:
+        raise AttemptNotFoundError(f"attempt {a.id} has no page {page_num}")
+
+    start = (page_num - 1) * page_size + 1
+    end = min(start + page_size - 1, total) if total > 0 else 0
+
+    answers: list[AttemptAnswer] = []
+    questions_by_id: dict[int, Question] = {}
+    options_by_qid: dict[int, list[QuestionOption]] = {}
+    topics_by_id: dict[int, str] = {}
+
+    if total > 0:
+        answers = list(
+            session.scalars(
+                select(AttemptAnswer)
+                .where(AttemptAnswer.attempt_id == a.id)
+                .where(AttemptAnswer.order_index >= start)
+                .where(AttemptAnswer.order_index <= end)
+                .order_by(AttemptAnswer.order_index)
+            )
+        )
+        if not answers:
+            raise AttemptNotFoundError(f"attempt {a.id} page {page_num} is empty")
+
+        qids = [ans.question_id for ans in answers]
+        questions_by_id = {
+            q.id: q
+            for q in session.scalars(select(Question).where(Question.id.in_(qids)))
+        }
+        for opt in session.scalars(
+            select(QuestionOption)
+            .where(QuestionOption.question_id.in_(qids))
+            .order_by(QuestionOption.question_id, QuestionOption.order_index)
+        ):
+            options_by_qid.setdefault(opt.question_id, []).append(opt)
+
+        topic_ids = {q.topic_id for q in questions_by_id.values() if q.topic_id is not None}
+        if topic_ids:
+            from app.models.catalog import (
+                Topic,  # noqa: PLC0415 — lazy import keeps catalog out of hot path
+            )
+
+            for t in session.scalars(select(Topic).where(Topic.id.in_(topic_ids))):
+                topics_by_id[t.id] = t.name or "—"
+
+    revealed = set(revealed_positions or [])
+    views: list[QuestionView] = []
+    for ans in answers:
+        q = questions_by_id.get(ans.question_id)
+        if q is None:
+            raise AttemptNotFoundError(
+                f"question {ans.question_id} missing for attempt {a.id}"
+            )
+        topic_label = (
+            topics_by_id.get(q.topic_id, "—") if q.topic_id is not None else "—"
+        )
+        views.append(
+            QuestionView(
+                attempt=a,
+                answer=ans,
+                question=q,
+                options=options_by_qid.get(q.id, []),
+                total=total,
+                selected_labels=_parse_selected_labels(ans.selected_options),
+                time_remaining_seconds=None,  # exposed on PageView, not per-q
+                topic_label=topic_label,
+            )
+        )
+
+    return PageView(
+        attempt=a,
+        page_num=page_num,
+        page_size=page_size,
+        total_questions=total,
+        total_pages=total_pages,
+        page_start=start if total > 0 else 0,
+        page_end=end,
+        views=views,
+        time_remaining_seconds=_time_remaining_seconds(session, a),
+        revealed_positions=revealed,
+    )
+
+
+def _resolve_topic_label(session: Session, topic_id: int | None) -> str:
+    if topic_id is None:
+        return "—"
+    from app.models.catalog import (
+        Topic,  # noqa: PLC0415 — lazy import keeps catalog out of hot path
+    )
+
+    topic = session.get(Topic, topic_id)
+    return (topic.name if topic and topic.name else "—") or "—"
 
 
 def _count(col):
@@ -335,7 +706,7 @@ def _time_remaining_seconds(session: Session, attempt: Attempt) -> int | None:
 def save_answer(
     session: Session,
     *,
-    actor: User,
+    actor: User | None,
     request_id: str | None,
     attempt_id: int,
     order: int,
@@ -377,7 +748,7 @@ def save_answer(
 def toggle_flag(
     session: Session,
     *,
-    actor: User,
+    actor: User | None,
     request_id: str | None,
     attempt_id: int,
     order: int,
@@ -403,7 +774,7 @@ def toggle_flag(
 def ensure_not_expired(
     session: Session,
     *,
-    actor: User,
+    actor: User | None,
     request_id: str | None,
     attempt: Attempt,
 ) -> None:
@@ -427,7 +798,7 @@ def ensure_not_expired(
 def submit_attempt(
     session: Session,
     *,
-    actor: User,
+    actor: User | None,
     request_id: str | None,
     attempt_id: int,
 ) -> Attempt:
@@ -451,7 +822,7 @@ def submit_attempt(
 def _submit_idempotent(
     session: Session,
     *,
-    actor: User,
+    actor: User | None,
     request_id: str | None,
     attempt: Attempt,
     action: AuditAction,
@@ -462,10 +833,11 @@ def _submit_idempotent(
     attempt.finished_at = now
     if attempt.started_at is not None:
         attempt.duration_seconds = max(0, int((now - attempt.started_at).total_seconds()))
+    actor_type, actor_id = _audit_actor(actor)
     write_audit_log(
         session,
-        actor_type=ActorType.user,
-        actor_id=actor.id,
+        actor_type=actor_type,
+        actor_id=actor_id,
         action=action,
         entity_type="attempt",
         entity_id=attempt.id,
@@ -493,11 +865,15 @@ __all__ = [
     "AttemptForbiddenError",
     "AttemptNotFoundError",
     "AttemptValidationError",
+    "PageView",
     "QuestionView",
     "ensure_not_expired",
+    "get_page_views",
     "get_question_view",
     "save_answer",
+    "start_admin_preview_attempt",
     "start_attempt",
+    "start_guest_attempt",
     "submit_attempt",
     "toggle_flag",
 ]

@@ -397,6 +397,59 @@ def test_publish_unpublish_exam_audited(nonce: str) -> None:
         assert len(unpub_audit) == 1
 
 
+def test_publish_partial_does_not_rotate_csrf_cookie(
+    nonce: str, client: TestClient
+) -> None:
+    """Regression: HTMX publish/unpublish must reuse the existing CSRF cookie.
+
+    Rotating the cookie on a partial response invalidated the parent
+    page's `#page-csrf` input, causing the next HTMX click on the same
+    page (publish, unpublish, delete) to 403 with "invalid csrf".
+    The 0-question first-click worked because it was the *first* click;
+    any second action failed silently because HTMX doesn't surface 403s.
+    """
+    actor = _make_admin(nonce)
+    with SessionLocal() as s:
+        actor = s.merge(actor)
+        provider = catalog_service.create_provider(
+            s, actor=actor, request_id=None, name=f"Prov {nonce}", slug=f"p04t-{nonce}"
+        )
+        course = catalog_service.create_course(
+            s, actor=actor, request_id=None, provider_id=provider.id, name="C", slug="c1"
+        )
+        exam_a = catalog_service.create_exam(
+            s, actor=actor, request_id=None, course_id=course.id, name="EA", slug="ea"
+        )
+        exam_b = catalog_service.create_exam(
+            s, actor=actor, request_id=None, course_id=course.id, name="EB", slug="eb"
+        )
+        s.commit()
+        exam_a_id, exam_b_id = exam_a.id, exam_b.id
+
+    _admin_login(client, nonce)
+    csrf, _ = _csrf_pair(client, "/admin/exams")
+
+    # First publish — succeeds and (post-fix) MUST NOT rotate the cookie.
+    r1 = client.post(
+        f"/admin/exams/{exam_a_id}/publish",
+        data={"csrf_token": csrf},
+    )
+    assert r1.status_code == 200, r1.text
+    set_cookie_headers = r1.headers.get_list("set-cookie")
+    assert not any("exam_csrf=" in h for h in set_cookie_headers), (
+        "publish row partial must not rotate the CSRF cookie — that breaks "
+        "subsequent HTMX clicks that include the parent page's #page-csrf"
+    )
+
+    # Second action with the SAME form token from the original page
+    # MUST succeed (proves the parent page's CSRF input is still valid).
+    r2 = client.post(
+        f"/admin/exams/{exam_b_id}/publish",
+        data={"csrf_token": csrf},
+    )
+    assert r2.status_code == 200, r2.text
+
+
 def test_soft_delete_exam_hides_from_public(nonce: str, client: TestClient) -> None:
     actor = _make_admin(nonce)
     with SessionLocal() as s:

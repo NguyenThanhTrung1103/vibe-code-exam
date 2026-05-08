@@ -10,6 +10,7 @@ Step 4  POST    /admin/imports/{id}/confirm     finalize
 from __future__ import annotations
 
 import json
+from dataclasses import dataclass
 from typing import Any
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile, status
@@ -50,12 +51,17 @@ _COMMUNITY_FIELDS: tuple[str, ...] = (
     "vote_d",
     "vote_e",
     "vote_f",
+    "vote_g",
+    "vote_h",
 )
 _OPTIONAL_FIELDS: tuple[str, ...] = (
     "option_c",
     "option_d",
     "option_e",
-    # Alternative to option_a/b/c/d/e: a single dump-style cell containing
+    "option_f",
+    "option_g",
+    "option_h",
+    # Alternative to option_a/b/.../h: a single dump-style cell containing
     # all options separated by `;` / `；` / newlines. Surfacing it under the
     # "Optional metadata" group keeps the required-fields card focused on
     # the canonical question_text / option_a / option_b shape.
@@ -92,6 +98,87 @@ def _imported_question_counts(session: object, import_ids: list[int]) -> dict[in
     return {sid: cnt for sid, cnt in rows if sid is not None}
 
 
+def _import_item_status_breakdown(
+    session: object, import_ids: list[int]
+) -> dict[int, dict[str, int]]:
+    """Per-import counts of staged rows by `import_items.status` (ok / error / …)."""
+    if not import_ids:
+        return {}
+    rows = session.execute(  # type: ignore[attr-defined]
+        select(ImportItem.import_id, ImportItem.status, func.count(ImportItem.id))
+        .where(ImportItem.import_id.in_(import_ids))
+        .group_by(ImportItem.import_id, ImportItem.status)
+    ).all()
+    out: dict[int, dict[str, int]] = {}
+    for iid, st, cnt in rows:
+        bucket = out.setdefault(int(iid), {})
+        bucket[st.value] = int(cnt)
+    return out
+
+
+def _exams_with_catalog(
+    session: object, exam_ids: list[int]
+) -> dict[int, tuple[Exam, Course, Provider]]:
+    """Map exam_id → (Exam, Course, Provider) for table columns."""
+    if not exam_ids:
+        return {}
+    uq = list({eid for eid in exam_ids if eid})
+    if not uq:
+        return {}
+    rows = session.execute(  # type: ignore[attr-defined]
+        select(Exam, Course, Provider)
+        .join(Course, Exam.course_id == Course.id)
+        .join(Provider, Course.provider_id == Provider.id)
+        .where(Exam.id.in_(uq))
+    ).all()
+    return {e.id: (e, c, p) for e, c, p in rows}
+
+
+@dataclass(frozen=True, slots=True)
+class RecentImportRow:
+    """One row in the Recent imports admin table (enriched for display)."""
+
+    imp: Import
+    exam: Exam | None
+    course: Course | None
+    provider: Provider | None
+    in_bank: int
+    item_counts: dict[str, int]
+
+    @property
+    def public_exam_path(self) -> str | None:
+        if self.exam is None or self.provider is None:
+            return None
+        return f"/exams/{self.provider.slug}/{self.exam.slug}"
+
+
+def _build_recent_import_rows(
+    session: object,
+    recent: list[Import],
+    imported_counts: dict[int, int],
+) -> list[RecentImportRow]:
+    """Join target exam / catalog + staging counts for the upload page table."""
+    ids = [r.id for r in recent]
+    breakdown = _import_item_status_breakdown(session, ids)
+    eids = [r.target_exam_id for r in recent if r.target_exam_id]
+    catalog = _exams_with_catalog(session, eids)
+    out: list[RecentImportRow] = []
+    for imp in recent:
+        pack = catalog.get(imp.target_exam_id) if imp.target_exam_id else None
+        ex, co, pr = pack if pack else (None, None, None)
+        out.append(
+            RecentImportRow(
+                imp=imp,
+                exam=ex,
+                course=co,
+                provider=pr,
+                in_bank=imported_counts.get(imp.id, 0),
+                item_counts=breakdown.get(imp.id, {}),
+            )
+        )
+    return out
+
+
 @router.get("", response_class=HTMLResponse)
 def upload_page(request: Request, user: RequireAdmin, session: SessionDep) -> HTMLResponse:
     exams = session.execute(
@@ -103,6 +190,7 @@ def upload_page(request: Request, user: RequireAdmin, session: SessionDep) -> HT
     ).all()
     recent = list(session.scalars(select(Import).order_by(Import.id.desc()).limit(20)))
     imported_counts = _imported_question_counts(session, [r.id for r in recent])
+    recent_rows = _build_recent_import_rows(session, recent, imported_counts)
     return render_with_csrf(
         request,
         "admin/imports/upload.html",
@@ -110,6 +198,7 @@ def upload_page(request: Request, user: RequireAdmin, session: SessionDep) -> HT
             "current_user": user,
             "exams": exams,
             "recent": recent,
+            "recent_rows": recent_rows,
             "imported_counts": imported_counts,
             "error": None,
         },
@@ -129,6 +218,7 @@ def _render_upload_with_error(
     ).all()
     recent = list(session.scalars(select(Import).order_by(Import.id.desc()).limit(20)))  # type: ignore[attr-defined]
     imported_counts = _imported_question_counts(session, [r.id for r in recent])
+    recent_rows = _build_recent_import_rows(session, recent, imported_counts)
     return render_with_csrf(
         request,
         "admin/imports/upload.html",
@@ -136,6 +226,7 @@ def _render_upload_with_error(
             "current_user": user,
             "exams": exams,
             "recent": recent,
+            "recent_rows": recent_rows,
             "imported_counts": imported_counts,
             "error": message,
         },

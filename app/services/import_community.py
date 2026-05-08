@@ -63,7 +63,7 @@ def _build_vote_distribution(normalized: dict[str, Any]) -> dict[str, int] | Non
     survives.
     """
     out: dict[str, int] = {}
-    for letter in ("A", "B", "C", "D", "E", "F"):
+    for letter in ("A", "B", "C", "D", "E", "F", "G", "H"):
         cell = normalized.get(f"vote_{letter.lower()}")
         n = _coerce_int(cell)
         if n is None or n < 0:

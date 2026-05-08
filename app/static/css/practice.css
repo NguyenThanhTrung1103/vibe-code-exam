@@ -1,0 +1,377 @@
+/* Phase 18.6 — Practice / guest-mode visual style (ExamTopics layout).
+   Loaded via templates/practice/_layout.html on top of base.css.
+   Scope: catalog cards, question cards, options, action buttons,
+   solution panel, navigation, exam header, progress bar. */
+
+*, *::before, *::after { box-sizing: border-box; }
+
+/* ── Page wrapper ── */
+.practice-wrap,
+.practice-main { max-width: 860px; margin: 32px auto; padding: 0 16px 60px; }
+
+/* ── Exam header (teal) ── */
+.exam-header {
+  background: #00838f;
+  color: #fff;
+  padding: 16px 24px;
+  font-size: 1.1rem;
+  font-weight: 700;
+  border-radius: 8px 8px 0 0;
+  letter-spacing: 0.01em;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+/* ── Progress bar ── */
+.progress-bar-wrap {
+  background: #fff;
+  border: 1px solid #e0e0e0;
+  border-top: none;
+  padding: 10px 24px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 20px;
+  border-radius: 0 0 4px 4px;
+}
+.progress-bar-track {
+  flex: 1;
+  height: 6px;
+  background: #e0e0e0;
+  border-radius: 3px;
+  overflow: hidden;
+}
+.progress-bar-fill {
+  height: 100%;
+  background: #00838f;
+  border-radius: 3px;
+  transition: width 0.3s ease;
+}
+.progress-label {
+  font-size: 0.82rem;
+  color: #757575;
+  white-space: nowrap;
+}
+
+/* ── Question card ── */
+.question-card {
+  background: #fff;
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  margin-bottom: 20px;
+  overflow: hidden;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+  transition: box-shadow 0.2s;
+}
+.question-card:hover {
+  box-shadow: 0 2px 8px rgba(0,0,0,0.10);
+}
+
+/* ── Question header (blue) ── */
+.question-header {
+  background: #1976d2;
+  color: #fff;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 11px 20px;
+}
+.question-number {
+  font-weight: 700;
+  font-size: 0.95rem;
+  letter-spacing: 0.01em;
+}
+.question-topic {
+  font-style: italic;
+  font-size: 0.85rem;
+  opacity: 0.88;
+}
+
+/* ── Question body ── */
+.question-body {
+  padding: 20px 24px 12px;
+}
+.question-text {
+  font-size: 0.97rem;
+  line-height: 1.65;
+  color: #1a1a1a;
+  margin: 0 0 18px;
+}
+.select-n-hint {
+  font-size: 0.88rem;
+  color: #6a1b9a;
+  margin: 0 0 12px;
+}
+
+/* ── Options ── */
+.options-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+.option-item {
+  border-radius: 6px;
+  margin-bottom: 4px;
+  transition: background 0.15s;
+}
+.option-item label {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 9px 10px;
+  cursor: pointer;
+  font-size: 0.95rem;
+  color: #333;
+  border-radius: 6px;
+  width: 100%;
+}
+.option-item label:hover {
+  background: #f0f4ff;
+}
+.option-item input[type="radio"],
+.option-item input[type="checkbox"] {
+  margin-top: 3px;
+  accent-color: #1976d2;
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+}
+.option-label {
+  font-weight: 700;
+  color: #1976d2;
+  min-width: 22px;
+}
+.option-text {
+  flex: 1;
+  line-height: 1.55;
+}
+.opt-marker  { display:block; margin-top:4px; color:#2e7d32; font-weight:600; font-size:0.85rem; }
+.opt-explanation { display:block; margin-top:4px; color:#616161; font-size:0.85rem; }
+
+/* ── Option states (after reveal) ── */
+.option-item.correct label {
+  background: #e8f5e9;
+}
+.option-item.correct .option-label {
+  color: #2e7d32;
+}
+.option-item.wrong-selected label {
+  background: #ffebee;
+}
+.option-item.wrong-selected .option-label {
+  color: #c62828;
+}
+
+/* ── Action buttons ── */
+.question-actions {
+  padding: 10px 24px 14px;
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  align-items: center;
+  border-top: 1px solid #f0f0f0;
+}
+.btn-reveal {
+  display: inline-block;
+  background: #1976d2;
+  color: #fff;
+  border: none;
+  padding: 8px 20px;
+  border-radius: 4px;
+  font-size: 0.88rem;
+  font-weight: 600;
+  cursor: pointer;
+  text-decoration: none;
+  transition: background 0.15s;
+}
+.btn-reveal:hover { background: #1565c0; color: #fff; }
+
+.btn-flag {
+  background: #fff;
+  color: #757575;
+  border: 1px solid #cfd8dc;
+  padding: 7px 14px;
+  border-radius: 20px;
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.btn-flag:hover { background: #f5f5f5; border-color: #90a4ae; }
+.btn-flag.flagged {
+  background: #fff3e0;
+  color: #e65100;
+  border-color: #ffb74d;
+}
+
+/* ── Solution panel ── */
+.solution-panel {
+  background: #f8fbff;
+  border-top: 2px solid #1976d2;
+  padding: 16px 24px;
+}
+.solution-panel strong { color: #1976d2; }
+.correct-answer-label {
+  display: inline-block;
+  background: #1976d2;
+  color: #fff;
+  font-weight: 700;
+  padding: 2px 10px;
+  border-radius: 12px;
+  font-size: 0.88rem;
+  margin-left: 4px;
+}
+.explanation {
+  margin-top: 10px;
+  font-size: 0.93rem;
+  color: #424242;
+  line-height: 1.65;
+}
+.explanation.muted {
+  color: #9e9e9e;
+  font-style: italic;
+}
+
+/* ── Page navigation ── */
+.attempt-nav {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  justify-content: flex-end;
+  padding: 8px 0 32px;
+  flex-wrap: wrap;
+}
+.page-indicator {
+  font-size: 0.88rem;
+  color: #757575;
+  margin-right: auto;
+}
+.btn-nav {
+  display: inline-block;
+  padding: 10px 26px;
+  border-radius: 5px;
+  border: 1.5px solid #1976d2;
+  color: #1976d2;
+  background: #fff;
+  font-size: 0.92rem;
+  font-weight: 600;
+  cursor: pointer;
+  text-decoration: none;
+  transition: all 0.15s;
+}
+.btn-nav:hover { background: #e3f0ff; }
+.btn-nav.btn-primary {
+  background: #1976d2;
+  color: #fff;
+}
+.btn-nav.btn-primary:hover { background: #1565c0; }
+.btn-nav.btn-submit {
+  background: #2e7d32;
+  color: #fff;
+  border-color: #2e7d32;
+}
+.btn-nav.btn-submit:hover { background: #1b5e20; }
+
+/* ── Exam-mode timer (teal header) ── */
+.exam-timer {
+  font-size: 0.92rem;
+  font-weight: 600;
+  background: rgba(255,255,255,0.18);
+  padding: 4px 12px;
+  border-radius: 14px;
+  letter-spacing: 0.04em;
+}
+.exam-timer.timer-warn { background: #ff9800; color: #fff; }
+.exam-timer.timer-crit { background: #d32f2f; color: #fff; }
+
+/* ── Public catalog ── */
+.exam-catalog,
+.practice-catalog-wrap {
+  max-width: 860px;
+  margin: 48px auto;
+  padding: 0 16px;
+}
+.catalog-heading,
+.practice-catalog-wrap h1 {
+  font-size: 1.6rem;
+  font-weight: 700;
+  color: #00838f;
+  margin-bottom: 6px;
+}
+.catalog-lede,
+.catalog-subtitle {
+  color: #757575;
+  font-size: 0.95rem;
+  margin-bottom: 28px;
+}
+.exam-card-list { list-style: none; padding: 0; margin: 0; }
+.exam-card {
+  background: #fff;
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  padding: 20px 24px;
+  margin-bottom: 14px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 20px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+  transition: box-shadow 0.2s;
+}
+.exam-card:hover { box-shadow: 0 3px 10px rgba(0,0,0,0.10); }
+.exam-card-meta {
+  font-size: 0.82rem;
+  color: #00838f;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-bottom: 4px;
+}
+.exam-card-title {
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: #1a1a1a;
+  margin-bottom: 4px;
+}
+.exam-card-count {
+  font-size: 0.85rem;
+  color: #757575;
+}
+.start-form { margin: 0; }
+.btn-start {
+  display: inline-block;
+  background: #00838f;
+  color: #fff;
+  border: none;
+  padding: 11px 26px;
+  border-radius: 5px;
+  font-size: 0.92rem;
+  font-weight: 600;
+  white-space: nowrap;
+  text-decoration: none;
+  cursor: pointer;
+  transition: background 0.15s;
+  flex-shrink: 0;
+}
+.btn-start:hover { background: #006064; color: #fff; }
+
+/* ── Empty state ── */
+.empty-state {
+  border: 1px dashed #cfd8dc;
+  border-radius: 8px;
+  padding: 36px 24px;
+  text-align: center;
+  color: #607d8b;
+  background: #fafafa;
+}
+.empty-state h2 { font-size: 1.1rem; margin-bottom: 8px; }
+
+.muted { color: #9e9e9e; font-size: 0.9rem; }
+
+/* ── Responsive ── */
+@media (max-width: 600px) {
+  .exam-card { flex-direction: column; align-items: flex-start; }
+  .btn-start { width: 100%; text-align: center; }
+  .attempt-nav { justify-content: center; }
+  .page-indicator { width: 100%; text-align: center; margin-right: 0; }
+}

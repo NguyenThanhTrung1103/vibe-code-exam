@@ -1,10 +1,52 @@
-{# Primary admin navigation — requires `request` and optionally `csrf_token` (for HTMX forms). #}
+{# Phase 18.7 — admin quick-nav button bar.
+
+   Renders a horizontal button bar of all major admin sections + a
+   public-site link that opens in a new tab. Wrapped by `admin-header-subnav`
+   in `_layout/header.html`. Active button is matched on path PREFIX so
+   nested routes (e.g. /admin/imports/123/preview) still light up Imports.
+
+   Special-case: Confirm pending uses an exact match on the query string
+   `?status=ready_to_publish` because it is a filtered view of /admin/imports
+   and would otherwise always lose the active highlight to plain Imports.
+#}
 {% set p = request.url.path %}
-<nav class="admin-primary-nav" aria-label="Admin sections">
-  <a class="admin-primary-nav__link {% if p == '/admin' or p.rstrip('/') == '/admin' %}is-active{% endif %}" href="/admin">Dashboard</a>
-  <a class="admin-primary-nav__link {% if p.startswith('/admin/imports') %}is-active{% endif %}" href="/admin/imports">Import dump</a>
-  <a class="admin-primary-nav__link {% if p.startswith('/admin/exams') %}is-active{% endif %}" href="/admin/exams">Manage exams</a>
-  <a class="admin-primary-nav__link {% if p.startswith('/admin/questions') %}is-active{% endif %}" href="/admin/questions">Review questions</a>
-  <span class="admin-primary-nav__sep" aria-hidden="true">·</span>
-  <a class="admin-primary-nav__link admin-primary-nav__link--muted {% if p.startswith('/admin/providers') %}is-active{% endif %}" href="/admin/providers">Catalog</a>
+{% set q = request.url.query %}
+{% set p_norm = p.rstrip('/') %}
+
+<nav class="quicknav" aria-label="Admin sections">
+  <a href="/admin"
+     class="qn-btn{% if p_norm == '/admin' %} qn-active{% endif %}">
+    <span class="qn-icon" aria-hidden="true">📊</span>
+    <span class="qn-label">Dashboard</span>
+  </a>
+  <a href="/admin/imports/new"
+     class="qn-btn{% if p_norm == '/admin/imports/new' %} qn-active{% endif %}">
+    <span class="qn-icon" aria-hidden="true">⬆️</span>
+    <span class="qn-label">Import dump</span>
+  </a>
+  <a href="/admin/imports"
+     class="qn-btn{% if p.startswith('/admin/imports') and p_norm != '/admin/imports/new' and 'status=ready_to_publish' not in q %} qn-active{% endif %}">
+    <span class="qn-icon" aria-hidden="true">📋</span>
+    <span class="qn-label">Imports</span>
+  </a>
+  <a href="/admin/exams"
+     class="qn-btn{% if p.startswith('/admin/exams') %} qn-active{% endif %}">
+    <span class="qn-icon" aria-hidden="true">📝</span>
+    <span class="qn-label">Exams</span>
+  </a>
+  <a href="/admin/questions"
+     class="qn-btn{% if p.startswith('/admin/questions') %} qn-active{% endif %}">
+    <span class="qn-icon" aria-hidden="true">🔍</span>
+    <span class="qn-label">Questions</span>
+  </a>
+  <a href="/admin/imports?status=ready_to_publish"
+     class="qn-btn{% if p.startswith('/admin/imports') and 'status=ready_to_publish' in q %} qn-active{% endif %}">
+    <span class="qn-icon" aria-hidden="true">✅</span>
+    <span class="qn-label">Confirm pending</span>
+  </a>
+  <a href="/practice" target="_blank" rel="noopener noreferrer"
+     class="qn-btn qn-external">
+    <span class="qn-icon" aria-hidden="true">🌐</span>
+    <span class="qn-label">Public site ↗</span>
+  </a>
 </nav>

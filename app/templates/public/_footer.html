@@ -1,0 +1,30 @@
+{# Public footer with brand, legal nav, and quick-link icons. #}
+<footer class="bg-surface-container-low dark:bg-surface-container-lowest border-t border-outline-variant">
+  <div class="flex flex-col md:flex-row justify-between items-center px-lg py-xl max-w-container-max mx-auto gap-lg">
+    <div class="flex flex-col items-center md:items-start">
+      <div class="flex items-center gap-sm mb-sm">
+        <div class="w-8 h-8 bg-primary flex items-center justify-center rounded">
+          <span class="material-symbols-outlined text-on-primary text-[18px]" style="font-variation-settings: 'FILL' 1;">shield</span>
+        </div>
+        <span class="font-h3 text-h3 font-bold text-primary">Exam Platform</span>
+      </div>
+      <p class="font-label-md text-label-md text-on-surface-variant">© 2026 Exam Platform (Beta) · data may be reset</p>
+    </div>
+    <nav class="flex flex-wrap justify-center gap-xl" aria-label="Legal">
+      <a class="font-label-md text-label-md text-on-surface-variant dark:text-outline hover:text-primary dark:hover:text-primary-fixed transition-all duration-200" href="/legal/disclaimer">Disclaimer</a>
+      <a class="font-label-md text-label-md text-on-surface-variant dark:text-outline hover:text-primary dark:hover:text-primary-fixed transition-all duration-200" href="/legal/terms">Terms</a>
+      <a class="font-label-md text-label-md text-on-surface-variant dark:text-outline hover:text-primary dark:hover:text-primary-fixed transition-all duration-200" href="/legal/privacy">Privacy</a>
+      <a class="font-label-md text-label-md text-on-surface-variant dark:text-outline hover:text-primary dark:hover:text-primary-fixed transition-all duration-200" href="/legal/dmca">DMCA</a>
+    </nav>
+    <div class="flex gap-md">
+      <a class="w-10 h-10 rounded-full bg-surface-container flex items-center justify-center text-on-surface-variant hover:text-primary transition-colors"
+         href="/" aria-label="Home">
+        <span class="material-symbols-outlined text-[20px]">language</span>
+      </a>
+      <a class="w-10 h-10 rounded-full bg-surface-container flex items-center justify-center text-on-surface-variant hover:text-primary transition-colors"
+         href="/legal/disclaimer" aria-label="Help">
+        <span class="material-symbols-outlined text-[20px]">help</span>
+      </a>
+    </div>
+  </div>
+</footer>

@@ -37,8 +37,8 @@ _ET_HEAD_HINTS = (
 
 # Regex fallbacks for files where the DOM doesn't quite match the pinned
 # selectors but still follows the recognizable pattern.
-_OPTION_LI_RE = re.compile(r"^\s*([A-Fa-f])[\.\)\:\-]\s*(.+?)\s*$", re.DOTALL)
-_VOTE_LETTER_RE = re.compile(r"\b([A-Fa-f])\b\s*[:\-]?\s*(\d+)")
+_OPTION_LI_RE = re.compile(r"^\s*([A-Ha-h])[\.\)\:\-]\s*(.+?)\s*$", re.DOTALL)
+_VOTE_LETTER_RE = re.compile(r"\b([A-Ha-h])\b\s*[:\-]?\s*(\d+)")
 # Badge/notice text appended inside option <li>s (e.g. "Most Voted").
 _OPTION_BADGE_NOISE_RE = re.compile(
     r"\s*(?:Most Voted|Correct Answer|Reveal Solution)\s*$",
@@ -119,7 +119,7 @@ def _block_to_row(block, fallback_index: int) -> ParsedQuestion | None:
         answer_el = block.select_one(".correct-answer, .reveal-solution, .question-answer")
         if answer_el:
             text = answer_el.get_text(" ", strip=True)
-            m = re.search(r"\b([A-F]+)\b", text.upper())
+            m = re.search(r"\b([A-H]+)\b", text.upper())
             if m:
                 answer = m.group(1)
 
@@ -169,11 +169,11 @@ def _extract_options(block) -> dict[str, str]:
     for li in items:
         letter_el = li.select_one("[data-choice-letter]")
         letter = (letter_el.get("data-choice-letter", "") if letter_el is not None else "").upper()
-        if letter and letter in "ABCDEF":
+        if letter and letter in "ABCDEFGH":
             # Strip the leading letter span + any trailing badge spans
             # (e.g. "Most Voted") so we keep just the option text.
             text = li.get_text(" ", strip=True)
-            text = re.sub(r"^\s*[A-Fa-f]\s*[\.\)\:\-]\s*", "", text)
+            text = re.sub(r"^\s*[A-Ha-h]\s*[\.\)\:\-]\s*", "", text)
             text = _OPTION_BADGE_NOISE_RE.sub("", text).strip()
             if text:
                 options[letter] = text
@@ -223,7 +223,7 @@ def _extract_votes_and_answer(vote_block) -> tuple[dict[str, int], str | None]:
             # Multi-letter votes (e.g. "AC") get split per letter so each
             # contributes to the per-letter tally.
             for letter in voted:
-                if letter in "ABCDEF":
+                if letter in "ABCDEFGH":
                     votes[letter] = votes.get(letter, 0) + count
             if entry.get("is_most_voted"):
                 answer = voted

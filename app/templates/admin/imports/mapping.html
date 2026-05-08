@@ -48,7 +48,7 @@
       </div>
     {% elif has_combined %}
       <div class="alert alert-success" role="status">
-        <strong>Combined options column detected. It will be split into Option A..F during parsing.</strong>
+        <strong>Combined options column detected. It will be split into Option A..H during parsing.</strong>
         Splits on <code class="code-chip">;</code>, <code class="code-chip">；</code>, or newlines. Separate <code class="code-chip">option_a</code> / <code class="code-chip">option_b</code> mappings are not required.
       </div>
     {% else %}
@@ -68,6 +68,18 @@
               {% for o in owners %}<code class="code-chip">{{ o }}</code>{% if not loop.last %}, {% endif %}{% endfor %}
             </li>
           {% endfor %}
+        </ul>
+      </div>
+    {% endif %}
+
+    {% set unmapped_headers = [] %}
+    {% for h in headers if h and not suggested.get(h) %}{% set _ = unmapped_headers.append(h) %}{% endfor %}
+    {% if unmapped_headers %}
+      <div class="alert alert-warning" role="alert">
+        <strong>Some columns could not be auto-mapped.</strong>
+        These will be ignored unless you assign them below. Rows are not rejected for unmapped columns — only required fields trigger errors.
+        <ul class="muted">
+          {% for h in unmapped_headers %}<li><code class="code-chip">{{ h }}</code></li>{% endfor %}
         </ul>
       </div>
     {% endif %}

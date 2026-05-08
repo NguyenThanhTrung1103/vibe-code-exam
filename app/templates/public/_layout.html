@@ -1,0 +1,87 @@
+{# Public marketing/discovery shell.
+
+Distinct from base.html: this is a self-contained Tailwind+Material 3
+shell used only by the public-facing pages (home, vendors, exam detail,
+legal). Admin / practice / auth keep their plain-CSS shell (base.html).
+Tailwind is loaded via the Play CDN; htmx + alpine come from local static. #}
+<!doctype html>
+<html lang="en" class="light">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>{% block title %}Exam Platform — Practice. Verify. Pass.{% endblock %}</title>
+  <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+  <link rel="stylesheet"
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" />
+  <script id="tailwind-config">
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          colors: {
+            "tertiary-container": "#bc4800",
+            "surface-variant": "#e1e2ed",
+            "surface-bright": "#faf8ff",
+            "tertiary": "#943700",
+            "on-tertiary-container": "#ffede6",
+            "on-tertiary": "#ffffff",
+            "on-surface": "#191b23",
+            "surface-container-low": "#f3f3fe",
+            "outline-variant": "#c3c6d7",
+            "surface-container-lowest": "#ffffff",
+            "primary-fixed-dim": "#b4c5ff",
+            "secondary-container": "#d0e1fb",
+            "background": "#faf8ff",
+            "primary-fixed": "#dbe1ff",
+            "primary-container": "#2563eb",
+            "tertiary-fixed": "#ffdbcd",
+            "on-primary": "#ffffff",
+            "surface-container-high": "#e7e7f3",
+            "surface-container-highest": "#e1e2ed",
+            "on-secondary-container": "#54647a",
+            "surface": "#faf8ff",
+            "on-background": "#191b23",
+            "secondary-fixed": "#d3e4fe",
+            "on-tertiary-fixed-variant": "#7d2d00",
+            "primary": "#004ac6",
+            "on-surface-variant": "#434655",
+            "outline": "#737686",
+            "surface-container": "#ededf9",
+            "on-tertiary-fixed": "#360f00",
+            "on-secondary-fixed": "#0b1c30",
+            "secondary-fixed-dim": "#b7c8e1",
+            "on-secondary": "#ffffff",
+            "secondary": "#505f76"
+          },
+          borderRadius: { DEFAULT: "0.25rem", lg: "0.5rem", xl: "0.75rem", full: "9999px" },
+          spacing: { lg: "24px", gutter: "24px", xl: "48px", md: "16px", xs: "4px", "container-max": "1280px", unit: "4px", sm: "8px" },
+          fontFamily: { h1: ["Inter"], caption: ["Inter"], "body-lg": ["Inter"], "label-md": ["Inter"], h2: ["Inter"], "body-md": ["Inter"], h3: ["Inter"] },
+          fontSize: {
+            h1: ["36px", { lineHeight: "1.2", letterSpacing: "-0.02em", fontWeight: "700" }],
+            caption: ["12px", { lineHeight: "1", letterSpacing: "0", fontWeight: "400" }],
+            "body-lg": ["18px", { lineHeight: "1.6", letterSpacing: "0", fontWeight: "400" }],
+            "label-md": ["14px", { lineHeight: "1", letterSpacing: "0.01em", fontWeight: "500" }],
+            h2: ["28px", { lineHeight: "1.3", letterSpacing: "-0.01em", fontWeight: "700" }],
+            "body-md": ["16px", { lineHeight: "1.5", letterSpacing: "0", fontWeight: "400" }],
+            h3: ["20px", { lineHeight: "1.4", letterSpacing: "0", fontWeight: "600" }]
+          }
+        }
+      }
+    };
+  </script>
+  <style>
+    .material-symbols-outlined { font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24; }
+    body { font-family: 'Inter', sans-serif; }
+  </style>
+  <script src="{{ url_for('static', path='js/htmx.min.js') }}" defer></script>
+  <script src="{{ url_for('static', path='js/alpine.min.js') }}" defer></script>
+  {% block extra_head %}{% endblock %}
+</head>
+<body class="bg-background text-on-surface {% block body_class %}{% endblock %}">
+  {% include "public/_header.html" %}
+  <main>
+    {% block content %}{% endblock %}
+  </main>
+  {% include "public/_footer.html" %}
+</body>
+</html>

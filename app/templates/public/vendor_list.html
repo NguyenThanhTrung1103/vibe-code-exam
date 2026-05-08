@@ -1,22 +1,34 @@
-{% extends "base.html" %}
+{% extends "public/_layout.html" %}
 {% block title %}Vendors — Exam Platform{% endblock %}
 {% block content %}
-
-<h1>Vendors</h1>
-{% if not providers %}
-  <p>No vendors with published exams yet.</p>
-{% else %}
-  <ul class="card-grid">
-    {% for p in providers %}
-      <li class="card">
-        <a href="/vendors/{{ p.slug }}">
-          {% if p.logo_url %}<img src="{{ p.logo_url }}" alt="{{ p.name }} logo">{% endif %}
-          <strong>{{ p.name }}</strong>
-          {% if p.description %}<p>{{ p.description[:120] }}</p>{% endif %}
+<section class="py-xl max-w-container-max mx-auto px-lg">
+  <header class="mb-lg pb-md border-b border-outline-variant">
+    <h1 class="font-h1 text-h1 text-on-surface mb-xs">Vendors</h1>
+    <p class="text-on-surface-variant font-body-md">All vendors with published practice exams.</p>
+  </header>
+  {% if not providers %}
+    <p class="text-on-surface-variant">No vendors with published exams yet.</p>
+  {% else %}
+    <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-md">
+      {% for p in providers %}
+        <a class="group bg-surface-container-lowest p-lg rounded-xl border border-outline-variant hover:border-primary hover:shadow-lg transition-all text-center flex flex-col"
+           href="/vendors/{{ p.slug }}">
+          <div class="aspect-square bg-surface-container-low rounded-lg mb-md flex items-center justify-center p-md overflow-hidden">
+            {% if p.logo_url %}
+              <img alt="{{ p.name }} logo"
+                   class="max-w-full max-h-full grayscale group-hover:grayscale-0 transition-all object-contain"
+                   src="{{ p.logo_url }}" />
+            {% else %}
+              <span class="font-h1 text-[32px] text-primary/30 group-hover:text-primary transition-colors">{{ p.name[0] | upper }}</span>
+            {% endif %}
+          </div>
+          <span class="font-h3 text-[16px] text-on-surface group-hover:text-primary transition-colors block mb-xs">{{ p.name }}</span>
+          {% if p.description %}
+            <p class="text-caption text-on-surface-variant line-clamp-2">{{ p.description[:120] }}</p>
+          {% endif %}
         </a>
-      </li>
-    {% endfor %}
-  </ul>
-{% endif %}
-
+      {% endfor %}
+    </div>
+  {% endif %}
+</section>
 {% endblock %}

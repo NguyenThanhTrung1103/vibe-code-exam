@@ -13,8 +13,12 @@
       File <code class="code-chip">{{ source_import.file_name }}</code>
       · format
       {% if source_import.detected_format %}<code class="code-chip">{{ source_import.detected_format }}</code>{% else %}—{% endif %}
-      · status <span class="exam-status status-{{ source_import.status.value }}">{{ source_import.status.value }}</span>
-      · {{ source_import_total if source_import_total is not none else 0 }} live question{{ '' if source_import_total == 1 else 's' }} linked to this import
+      · import status <span class="exam-status status-{{ source_import.status.value }}">{{ source_import.status.value }}</span>
+      · staged rows <strong>{{ source_import.total_questions or 0 }}</strong>
+      · in bank <strong>{{ source_import_total if source_import_total is not none else 0 }}</strong>
+      {% if (source_import.total_questions or 0) > (source_import_total or 0) and source_import.status.value in ("normalized", "partially_verified") %}
+        <em>(confirm on Preview to create bank rows)</em>
+      {% endif %}
     </span>
     <br>
     <a class="btn" href="/admin/imports">Back to imports</a>
@@ -55,6 +59,8 @@
       <option value="hard" {% if filters.difficulty == "hard" %}selected{% endif %}>hard</option>
     </select>
   </label>
+  <label>Source import # <input type="number" name="source_import_id" min="1" placeholder="e.g. 137"
+         value="{{ filters.source_import_id if filters.source_import_id else '' }}"></label>
   <label>Search
     <input name="q" value="{{ filters.q }}" placeholder="ILIKE %text%">
   </label>

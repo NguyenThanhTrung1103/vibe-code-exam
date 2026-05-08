@@ -14,7 +14,7 @@ Gated by `EXAM_PLATFORM_TEST_REAL_DB=1`. Verifies:
   * submit is idempotent.
   * audit rows for start, submit, expire (none for save).
   * RBAC: anon → 401, missing CSRF → 403.
-  * Phase 08 not implemented yet — submitted_stub renders.
+  * After submit, redirect to scored result page (`/attempts/{id}/result`).
 """
 
 from __future__ import annotations
@@ -190,6 +190,65 @@ def _seed_exam_with_questions(
             s.add(
                 QuestionOption(
                     question_id=q.id, label="B", option_text="right", is_correct=True, order_index=1
+                )
+            )
+        s.commit()
+        return exam_id
+
+
+def _seed_draft_exam_with_imported_questions(
+    actor: User, nonce: str, *, n_questions: int = 2
+) -> int:
+    """Draft (unpublished) exam with `QuestionStatus.imported` rows — for admin preview."""
+    from decimal import Decimal
+
+    with SessionLocal() as s:
+        actor = s.merge(actor)
+        provider = catalog_service.create_provider(
+            s, actor=actor, request_id=None, name=f"Pdr{nonce}", slug=f"p07t-{nonce}dr"
+        )
+        course = catalog_service.create_course(
+            s, actor=actor, request_id=None, provider_id=provider.id, name="C", slug=f"c-dr-{nonce}"
+        )
+        exam = catalog_service.create_exam(
+            s,
+            actor=actor,
+            request_id=None,
+            course_id=course.id,
+            name="DraftE",
+            slug=f"e-dr-{nonce}",
+            time_limit_seconds=None,
+            passing_score_percent=Decimal("60.00"),
+        )
+        s.commit()
+        exam_id = exam.id
+
+        for i in range(n_questions):
+            q = Question(
+                exam_id=exam_id,
+                question_text=f"DraftQ{i}-{nonce}",
+                question_type=QuestionType.single,
+                status=QuestionStatus.imported,
+                content_hash="d" * 62 + f"{i:02d}",
+            )
+            s.add(q)
+            s.flush()
+            s.add(
+                QuestionOption(
+                    question_id=q.id,
+                    label="A",
+                    option_text="wrong",
+                    is_correct=False,
+                    order_index=0,
+                )
+            )
+            s.add(
+                QuestionOption(
+                    question_id=q.id,
+                    label="B",
+                    option_text="right",
+                    is_correct=True,
+                    order_index=1,
                 )
             )
         s.commit()
@@ -680,7 +739,10 @@ def test_csrf_required_on_start(client: TestClient, nonce: str) -> None:
 
 
 def test_anon_cannot_view_question_or_submit(client: TestClient) -> None:
-    assert client.get("/attempts/1/q/1").status_code == 401
+    # Phase 18.6 — page route is the auth-gated render; legacy /q/{n} is a
+    # dumb 302 → /page/{ceil(n/5)} that does not itself enforce auth (the
+    # target does). So we probe the page route for the 401.
+    assert client.get("/attempts/1/page/1").status_code == 401
     r = client.post("/attempts/1/submit", data={"csrf_token": "x"})
     assert r.status_code == 401
 
@@ -704,10 +766,14 @@ def test_full_http_flow_smoke(client: TestClient, nonce: str) -> None:
     location = r.headers["location"]
     attempt_id = int(location.split("/")[2])
 
-    # 2. show q1
-    r = client.get(f"/attempts/{attempt_id}/q/1")
+    # 2. show page 1 (5-per-page UI bundles q1 + q2 since exam has 2 qs)
+    r = client.get(f"/attempts/{attempt_id}/page/1")
     assert r.status_code == 200
-    assert "Q1 / 2" in r.text
+    assert "Question #1" in r.text
+    # Legacy URL still works via 302 redirect:
+    r_legacy = client.get(f"/attempts/{attempt_id}/q/1", follow_redirects=False)
+    assert r_legacy.status_code == 302
+    assert r_legacy.headers["location"].endswith("/page/1#q1")
 
     # 3. autosave selection
     csrf2 = client.cookies.get("exam_csrf")
@@ -725,9 +791,10 @@ def test_full_http_flow_smoke(client: TestClient, nonce: str) -> None:
     assert r.status_code == 200
     assert "Unflag" in r.text
 
-    # 5. nav to q2 + submit
-    r = client.get(f"/attempts/{attempt_id}/q/2")
+    # 5. nav to q2 (still on page 1 with PAGE_SIZE=5) + submit
+    r = client.get(f"/attempts/{attempt_id}/page/1")
     assert r.status_code == 200
+    assert "Question #2" in r.text
     csrf3 = client.cookies.get("exam_csrf")
     r = client.post(
         f"/attempts/{attempt_id}/submit",
@@ -735,12 +802,78 @@ def test_full_http_flow_smoke(client: TestClient, nonce: str) -> None:
         follow_redirects=False,
     )
     assert r.status_code == 303
-    assert r.headers["location"].endswith("/submitted")
+    assert r.headers["location"].endswith("/result")
 
-    # 6. submitted stub renders
-    r = client.get(f"/attempts/{attempt_id}/submitted")
+    # 6. result page renders
+    r = client.get(f"/attempts/{attempt_id}/result")
     assert r.status_code == 200
-    assert "submitted" in r.text.lower()
+    assert "result" in r.text.lower() or "score" in r.text.lower()
+
+
+def test_admin_preview_starts_on_draft_imported_exam(nonce: str) -> None:
+    admin = _make_user(nonce, UserRole.admin)
+    exam_id = _seed_draft_exam_with_imported_questions(admin, nonce, n_questions=3)
+    with SessionLocal() as s:
+        admin = s.merge(admin)
+        att = attempt_service.start_admin_preview_attempt(
+            s, actor=admin, request_id=None, exam_id=exam_id
+        )
+        s.commit()
+        assert att.total_questions == 3
+        assert att.exam_id == exam_id
+    # Regular student start_attempt still blocked while exam is draft
+    student = _make_user(nonce + "stu", UserRole.student)
+    with SessionLocal() as s:
+        student = s.merge(student)
+        with pytest.raises(attempt_service.AttemptValidationError, match="not available"):
+            attempt_service.start_attempt(
+                s,
+                actor=student,
+                request_id=None,
+                exam_id=exam_id,
+                mode=AttemptMode.practice,
+            )
+
+
+def test_non_admin_cannot_start_admin_preview_service(nonce: str) -> None:
+    admin = _make_user(nonce, UserRole.admin)
+    student = _make_user(nonce + "stu", UserRole.student)
+    exam_id = _seed_draft_exam_with_imported_questions(admin, nonce, n_questions=1)
+    with SessionLocal() as s:
+        student = s.merge(student)
+        with pytest.raises(attempt_service.AttemptForbiddenError, match="administrator"):
+            attempt_service.start_admin_preview_attempt(
+                s, actor=student, request_id=None, exam_id=exam_id
+            )
+
+
+def test_admin_preview_http_post_redirects(client: TestClient, nonce: str) -> None:
+    admin = _make_user(nonce, UserRole.admin)
+    exam_id = _seed_draft_exam_with_imported_questions(admin, nonce, n_questions=2)
+    _login(client, admin)
+    csrf = _csrf_pair(client, "/admin/exams")
+    r = client.post(
+        f"/admin/exams/{exam_id}/practice-preview/start",
+        data={"csrf_token": csrf},
+        follow_redirects=False,
+    )
+    assert r.status_code == 303
+    assert "/attempts/" in r.headers["location"]
+    assert r.headers["location"].endswith("/page/1")
+
+
+def test_student_admin_preview_route_forbidden(client: TestClient, nonce: str) -> None:
+    admin = _make_user(nonce, UserRole.admin)
+    student = _make_user(nonce + "stu", UserRole.student)
+    exam_id = _seed_draft_exam_with_imported_questions(admin, nonce, n_questions=1)
+    _login(client, student)
+    csrf = _csrf_pair(client, "/admin/exams")
+    r = client.post(
+        f"/admin/exams/{exam_id}/practice-preview/start",
+        data={"csrf_token": csrf},
+        follow_redirects=False,
+    )
+    assert r.status_code == 403
 
 
 def test_cross_user_http_403(client: TestClient, nonce: str) -> None:
@@ -762,5 +895,5 @@ def test_cross_user_http_403(client: TestClient, nonce: str) -> None:
     # Alice logs out, Bob logs in.
     client.post("/auth/logout")
     _login(client, bob)
-    r = client.get(f"/attempts/{attempt_id}/q/1")
+    r = client.get(f"/attempts/{attempt_id}/page/1")
     assert r.status_code == 403

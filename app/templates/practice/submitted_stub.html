@@ -6,9 +6,11 @@
 {% if attempt.finished_at %}
   <p>Finished at: <time datetime="{{ attempt.finished_at.isoformat() }}">{{ attempt.finished_at.isoformat() }}</time></p>
   {% if attempt.duration_seconds %}<p>Duration: {{ attempt.duration_seconds }}s</p>{% endif %}
+  <p>
+    <a class="btn btn-primary" href="/attempts/{{ attempt.id }}/result">View result</a>
+    <a class="btn" href="/attempts/{{ attempt.id }}/review">Review answers</a>
+  </p>
 {% endif %}
-<p>Detailed scoring + review lands in Phase 08. For now this is the
-   end-of-attempt placeholder.</p>
 <p>
   <a class="btn" href="/">Home</a>
   <a class="btn" href="/vendors">Vendors</a>

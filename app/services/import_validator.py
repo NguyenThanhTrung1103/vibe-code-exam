@@ -20,9 +20,9 @@ from app.services.import_community import extract_community_payload
 
 ALLOWED_DIFFICULTY = {"easy", "medium", "hard"}
 ALLOWED_QTYPE = {"single", "multiple", "true_false"}
-# 1:1 with option_a..option_f. Vietnamese / dump-style XLSX feeds frequently
-# carry up to 6 options (combined_options is split into a..f).
-OPTION_LABELS = ("A", "B", "C", "D", "E", "F")
+# 1:1 with option_a..option_h. Cisco/Fortinet/AWS-style dumps occasionally
+# carry up to 8 options; combined_options is split into a..h.
+OPTION_LABELS = ("A", "B", "C", "D", "E", "F", "G", "H")
 MAX_QUESTION_LEN = 4000
 MAX_OPTION_LEN = 1000
 
@@ -65,6 +65,14 @@ def validate_row(normalized: dict[str, Any]) -> ValidationResult:
     """Validate a normalized row. `normalized` may have None values."""
     errors: list[str] = []
     warnings: list[str] = []
+
+    overflow = normalized.get("combined_options_overflow")
+    if isinstance(overflow, int) and overflow > len(OPTION_LABELS):
+        errors.append(
+            f"combined_options expands to {overflow} option(s); only "
+            f"{len(OPTION_LABELS)} (labels {', '.join(OPTION_LABELS)}) are supported. "
+            "Shorten the cell or split options into separate columns."
+        )
 
     q = normalized.get("question_text")
     if not q:
@@ -163,13 +171,14 @@ def _collect_correct_answer(
             s.strip() for s in text.replace(";", ",").replace("\n", ",").split(",") if s.strip()
         ]
     # Multi-answer convenience: PDF/HTML dumps frequently express multi-select
-    # answers as a contiguous run of A–F letters (e.g. "BD", "ACE") with no
-    # separator. Expand any such entry into individual single-letter entries
-    # so the per-letter resolution path below sees them as A, C, E.
+    # answers as a contiguous run of A–H letters (e.g. "BD", "ACE", "ACFGH")
+    # with no separator. Expand any such entry into individual single-letter
+    # entries so the per-letter resolution path below sees them as A, C, E.
+    _LABEL_CHARS = "".join(OPTION_LABELS)  # "ABCDEFGH"
     expanded: list[str] = []
     for entry in entries:
         u = entry.upper()
-        if 2 <= len(u) <= 6 and all(ch in "ABCDEF" for ch in u):
+        if 2 <= len(u) <= len(OPTION_LABELS) and all(ch in _LABEL_CHARS for ch in u):
             expanded.extend(u)
         else:
             expanded.append(entry)
@@ -203,7 +212,10 @@ def _collect_correct_answer(
                     continue
                 errors.append(f"correct_answer numeric {u!r} → {letter!r} has no matching option")
                 continue
-            errors.append(f"correct_answer numeric {u!r} out of range")
+            errors.append(
+                f"correct_answer numeric {u!r} out of range "
+                f"(only 1–{len(OPTION_LABELS)} map to {', '.join(OPTION_LABELS)})"
+            )
             continue
         # 3. Verbatim option text (case-insensitive)
         match = text_to_label.get(entry.casefold().strip())

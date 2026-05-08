@@ -28,29 +28,36 @@ def test_validate_options_min_two() -> None:
         _validate_options(_opts(("A", "x")), ["A"], QuestionType.single)
 
 
-def test_validate_options_max_six() -> None:
-    """Storage cap raised from A–E to A–F on 2026-05-04 to match dump-style
-    XLSX feeds whose `combined_options` cell can carry up to six options.
-    A seventh option is still rejected.
+def test_validate_options_max_eight() -> None:
+    """Storage cap raised to A–H on 2026-05-05 (Bug 1 fix) to support
+    Cisco/Fortinet questions with up to eight options. A ninth is rejected.
     """
-    with pytest.raises(QuestionValidationError, match="at most six"):
+    with pytest.raises(QuestionValidationError, match="at most"):
         _validate_options(
             _opts(
-                ("A", "1"),
-                ("B", "2"),
-                ("C", "3"),
-                ("D", "4"),
-                ("E", "5"),
-                ("F", "6"),
-                ("G", "7"),
+                ("A", "1"), ("B", "2"), ("C", "3"), ("D", "4"),
+                ("E", "5"), ("F", "6"), ("G", "7"), ("H", "8"),
+                ("I", "9"),
             ),
             ["A"],
             QuestionType.single,
         )
 
 
+def test_validate_options_accepts_eight() -> None:
+    """An eight-option question (A–H) must validate without raising."""
+    _validate_options(
+        _opts(
+            ("A", "1"), ("B", "2"), ("C", "3"), ("D", "4"),
+            ("E", "5"), ("F", "6"), ("G", "7"), ("H", "8"),
+        ),
+        ["A"],
+        QuestionType.single,
+    )
+
+
 def test_validate_options_accepts_six() -> None:
-    """A six-option question (A–F) must validate without raising."""
+    """A six-option question (A–F) still validates — no regression."""
     _validate_options(
         _opts(("A", "1"), ("B", "2"), ("C", "3"), ("D", "4"), ("E", "5"), ("F", "6")),
         ["A"],

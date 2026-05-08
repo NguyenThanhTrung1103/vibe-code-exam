@@ -2,18 +2,20 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Form, HTTPException, Request, status
-from fastapi.responses import HTMLResponse
+from fastapi import APIRouter, Depends, Form, HTTPException, Request, status
+from fastapi.responses import HTMLResponse, RedirectResponse
 from pydantic import ValidationError
 from sqlalchemy import select
 
+from app.auth.csrf import CSRF_COOKIE_NAME, CSRF_FORM_FIELD
 from app.auth.permissions import RequireAdmin
 from app.deps import SessionDep
 from app.middleware import REQUEST_ID_HEADER
 from app.models.catalog import Course, Exam, Provider
 from app.routers.admin._common import flash_error, render_with_csrf, require_csrf, templates
 from app.schemas.catalog import ExamCreate, ExamUpdate
-from app.services import catalog_service
+from app.security.rate_limits import RL_ATTEMPT_START
+from app.services import attempt_service, catalog_service
 
 router = APIRouter(prefix="/admin/exams", tags=["admin", "catalog"])
 
@@ -179,11 +181,47 @@ def soft_delete_exam(
     return HTMLResponse("")
 
 
+@router.post(
+    "/{exam_id}/practice-preview/start",
+    dependencies=[Depends(RL_ATTEMPT_START)],
+)
+def start_practice_preview(
+    request: Request,
+    exam_id: int,
+    user: RequireAdmin,
+    session: SessionDep,
+    csrf_token: str = Form(""),
+) -> RedirectResponse:
+    """Admin-only practice run against all bank questions (draft exam OK)."""
+    require_csrf(request, csrf_token)
+    try:
+        attempt = attempt_service.start_admin_preview_attempt(
+            session,
+            actor=user,
+            request_id=request.headers.get(REQUEST_ID_HEADER),
+            exam_id=exam_id,
+        )
+    except attempt_service.AttemptValidationError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    except attempt_service.AttemptForbiddenError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
+    session.commit()
+    return RedirectResponse(
+        url=f"/attempts/{attempt.id}/page/1",
+        status_code=status.HTTP_303_SEE_OTHER,
+    )
+
+
 def _row_partial(request: Request, session, exam: Exam) -> HTMLResponse:
     course = session.get(Course, exam.course_id)
     provider = session.get(Provider, course.provider_id) if course else None
+    # Reuse the existing CSRF cookie token rather than minting a new one.
+    # Rotating the cookie on a partial response would invalidate the
+    # parent page's `#page-csrf` input — the next HTMX click would send
+    # the old form token against the new cookie and 403 with "invalid csrf".
+    csrf = request.cookies.get(CSRF_COOKIE_NAME, "")
     return templates.TemplateResponse(
         request,
         "admin/catalog/exams/_row.html",
-        {"row": (exam, course, provider)},
+        {"row": (exam, course, provider), CSRF_FORM_FIELD: csrf},
     )

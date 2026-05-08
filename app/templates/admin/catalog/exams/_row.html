@@ -34,5 +34,11 @@
             hx-confirm="Soft-delete exam {{ exam.name }}?">
       Delete
     </button>
+    <form method="post" action="/admin/exams/{{ exam.id }}/practice-preview/start" style="display:inline;">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+      <button class="btn" type="submit" title="Practice all bank questions on this exam (draft OK; admin only)">
+        Practice preview
+      </button>
+    </form>
   </td>
 </tr>

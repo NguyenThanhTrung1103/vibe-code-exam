@@ -21,7 +21,6 @@ All callers commit. Errors:
 
 from __future__ import annotations
 
-import hashlib
 from datetime import UTC, datetime
 
 from sqlalchemy import delete, select, update
@@ -44,8 +43,9 @@ from app.models.questions import (
     QuestionOption,
 )
 from app.models.users import User
+from app.services.import_dedup import content_hash as _shared_content_hash
 
-OPTION_LABELS = ("A", "B", "C", "D", "E", "F")
+OPTION_LABELS = ("A", "B", "C", "D", "E", "F", "G", "H")
 
 
 class QuestionNotFoundError(LookupError):
@@ -61,23 +61,17 @@ class QuestionValidationError(ValueError):
 # ---------------------------------------------------------------------------
 
 
-def _normalize_for_hash(text: str) -> str:
-    """Mirror Phase 05's normalization for hash purposes only — strip and
-    collapse whitespace, lowercase. Intentionally lighter than the full
-    `import_normalizer.normalize_text` because edits already arrived sanitized.
-    """
-    return " ".join(text.strip().split())
-
-
 def _content_hash(question_text: str, options: list[tuple[str, str]]) -> str:
-    """Same canonical recipe as `app/services/import_dedup.py:content_hash`.
-
-    sha256(normalized_q + "|" + "||".join(sorted(non_empty_normalized_opts)))
+    """Defer to `import_dedup.content_hash` so manual-edit and import paths
+    produce identical hashes for identical content. See that function's
+    docstring for the canonicalisation contract.
     """
-    q = _normalize_for_hash(question_text or "")
-    opts = sorted(_normalize_for_hash(t) for _, t in options if t and t.strip())
-    payload = q + "|" + "||".join(opts)
-    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+    return _shared_content_hash(
+        {
+            "question_text": question_text or "",
+            "options": list(options or []),
+        }
+    )
 
 
 def _validate_options(
@@ -86,8 +80,10 @@ def _validate_options(
     """Raise `QuestionValidationError` if option set is malformed."""
     if not options or len(options) < 2:
         raise QuestionValidationError("at least two non-empty options required")
-    if len(options) > 6:
-        raise QuestionValidationError("at most six options allowed (A–F)")
+    if len(options) > len(OPTION_LABELS):
+        raise QuestionValidationError(
+            f"at most {len(OPTION_LABELS)} options allowed (A–{OPTION_LABELS[-1]})"
+        )
     labels = [lbl for lbl, _ in options]
     if labels != sorted(labels) or labels != list(OPTION_LABELS[: len(labels)]):
         raise QuestionValidationError("option labels must be A,B,...; consecutive starting at A")

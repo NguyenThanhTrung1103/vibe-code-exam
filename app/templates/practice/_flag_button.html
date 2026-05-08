@@ -1,4 +1,12 @@
+{# Phase 18.6 — flag button partial. Each question on the page has its own,
+   keyed by `position` (the global 1-based order_index) so HTMX swaps replace
+   only the targeted card's button. Falls back to position-less id when an
+   older caller supplies neither (kept defensive for review pages). #}
 {% set _a = answer if answer is defined else a %}
-<button id="flag-button" type="submit" class="btn-flag {% if _a.flagged %}flagged{% endif %}">
-  {% if _a.flagged %}🚩 Unflag{% else %}🏳 Flag for review{% endif %}
+{% set _btn_id = ('flag-button-' ~ position) if position is defined else 'flag-button' %}
+<button id="{{ _btn_id }}"
+        type="submit"
+        class="btn-flag{% if _a.flagged %} flagged{% endif %}"
+        aria-pressed="{{ 'true' if _a.flagged else 'false' }}">
+  {% if _a.flagged %}🚩 Unflag{% else %}⚐ Flag for review{% endif %}
 </button>

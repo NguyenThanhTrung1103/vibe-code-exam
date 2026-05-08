@@ -17,11 +17,15 @@ from starlette.responses import Response
 
 from app.config import Settings, get_settings
 
+# Public pages render a Tailwind CDN + Google Fonts shell (see
+# `templates/public/_layout.html`). Admin/practice/auth keep the
+# self-only chrome and don't depend on these origins.
 CSP_DIRECTIVES = (
     "default-src 'self'; "
-    "img-src 'self' data:; "
-    "style-src 'self' 'unsafe-inline'; "
-    "script-src 'self' 'unsafe-inline'; "
+    "img-src 'self' data: https:; "
+    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
+    "script-src 'self' 'unsafe-inline' https://cdn.tailwindcss.com; "
+    "font-src 'self' https://fonts.gstatic.com; "
     "form-action 'self'; "
     "frame-ancestors 'none'; "
     "base-uri 'self'"

@@ -3,6 +3,7 @@
 {% set correct = nd.get('correct_answer') or [] %}
 {% set ext_qid = nd.get('external_question_id') or '' %}
 {% set disc_url = nd.get('discussion_url') or '' %}
+{% set near_dup = nd.get('_near_duplicate_match') or [] %}
 {% set vote_summary = [] %}
 {% for letter in ['a','b','c','d','e','f'] %}
   {% set vk = 'vote_' ~ letter %}
@@ -19,13 +20,22 @@
   <td>
     {% if item.error_message %}<span class="alert alert-error" style="display:inline-block;padding:2px 8px;font-size:12px;margin:0;">{{ item.error_message }}</span>{% endif %}
     {% if item.warning_message %}<span class="alert alert-warning" style="display:inline-block;padding:2px 8px;font-size:12px;margin:0;">{{ item.warning_message }}</span>{% endif %}
+    {% if near_dup %}
+      <div style="margin-top:4px;font-size:12px;">
+        Similar to:
+        {% for m in near_dup %}
+          <a class="code-chip" href="/admin/questions/{{ m.question_id }}/edit"
+             title="similarity {{ m.similarity }}">#{{ m.question_id }} (sim {{ '%.2f' | format(m.similarity|float) }})</a>{% if not loop.last %}, {% endif %}
+        {% endfor %}
+      </div>
+    {% endif %}
   </td>
   <td>
-    {% if item.status.value in ('ok','skipped') %}
+    {% if item.status.value in ('ok','warning','skipped') %}
       <button class="btn-ghost" type="button"
               hx-post="/admin/imports/{{ item.import_id }}/items/{{ item.id }}/toggle"
               hx-include="#page-csrf" hx-target="#item-{{ item.id }}" hx-swap="outerHTML">
-        {% if item.status.value == 'ok' %}Skip{% else %}Reselect{% endif %}
+        {% if item.status.value == 'skipped' %}Reselect{% else %}Skip{% endif %}
       </button>
     {% endif %}
   </td>

@@ -1,31 +1,53 @@
-{% extends "base.html" %}
+{% extends "public/_layout.html" %}
 {% block title %}{{ provider.name }} exams — Exam Platform{% endblock %}
 {% block content %}
+<section class="py-xl max-w-container-max mx-auto px-lg">
+  <nav class="text-caption text-on-surface-variant mb-md" aria-label="Breadcrumb">
+    <a href="/vendors" class="hover:text-primary">Vendors</a> ›
+    <span class="text-on-surface">{{ provider.name }}</span>
+  </nav>
 
-<header class="vendor-header">
-  {% if provider.logo_url %}<img src="{{ provider.logo_url }}" alt="{{ provider.name }} logo">{% endif %}
-  <h1>{{ provider.name }}</h1>
-  {% if provider.description %}<p>{{ provider.description }}</p>{% endif %}
-</header>
+  <header class="flex items-center gap-lg mb-xl pb-lg border-b border-outline-variant">
+    <div class="w-20 h-20 bg-surface-container-low rounded-xl flex items-center justify-center p-md flex-shrink-0">
+      {% if provider.logo_url %}
+        <img alt="{{ provider.name }} logo" class="max-w-full max-h-full object-contain" src="{{ provider.logo_url }}" />
+      {% else %}
+        <span class="font-h1 text-h1 text-primary/40">{{ provider.name[0] | upper }}</span>
+      {% endif %}
+    </div>
+    <div>
+      <h1 class="font-h1 text-h1 text-on-surface mb-xs">{{ provider.name }}</h1>
+      {% if provider.description %}
+        <p class="font-body-md text-on-surface-variant max-w-3xl">{{ provider.description }}</p>
+      {% endif %}
+    </div>
+  </header>
 
-{% if not courses %}
-  <p>No published exams for {{ provider.name }} yet.</p>
-{% else %}
-  {% for bucket in courses %}
-    <section class="course-block">
-      <h2>{{ bucket.course.name }}</h2>
-      {% if bucket.course.description %}<p>{{ bucket.course.description }}</p>{% endif %}
-      <ul>
-        {% for exam in bucket.exams %}
-          <li>
-            <a href="/exams/{{ provider.slug }}/{{ exam.slug }}">
-              {{ exam.code or "" }} {{ exam.name }}
+  {% if not courses %}
+    <p class="text-on-surface-variant">No published exams for {{ provider.name }} yet.</p>
+  {% else %}
+    {% for bucket in courses %}
+      <section class="mb-xl">
+        <h2 class="font-h2 text-h2 text-on-surface mb-xs">{{ bucket.course.name }}</h2>
+        {% if bucket.course.description %}
+          <p class="font-body-md text-on-surface-variant mb-md">{{ bucket.course.description }}</p>
+        {% endif %}
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-md">
+          {% for exam in bucket.exams %}
+            <a class="bg-surface-container-lowest p-lg rounded-xl border border-outline-variant hover:border-primary hover:shadow-md transition-all flex items-center justify-between gap-md"
+               href="/exams/{{ provider.slug }}/{{ exam.slug }}">
+              <div class="min-w-0">
+                {% if exam.code %}
+                  <span class="text-caption font-label-md text-primary bg-primary/10 px-sm py-0.5 rounded mb-xs inline-block">{{ exam.code }}</span>
+                {% endif %}
+                <h3 class="font-h3 text-h3 text-on-surface truncate">{{ exam.name }}</h3>
+              </div>
+              <span class="material-symbols-outlined text-on-surface-variant flex-shrink-0">arrow_forward</span>
             </a>
-          </li>
-        {% endfor %}
-      </ul>
-    </section>
-  {% endfor %}
-{% endif %}
-
+          {% endfor %}
+        </div>
+      </section>
+    {% endfor %}
+  {% endif %}
+</section>
 {% endblock %}

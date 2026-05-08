@@ -68,7 +68,11 @@ from app.services.excel_parser import (
     ParsedRow as _ParsedRow,
 )
 from app.services.import_community import upsert_community_source
-from app.services.import_dedup import content_hash, existing_question_hashes_for_exam
+from app.services.import_dedup import (
+    content_hash,
+    existing_question_hashes_for_exam,
+    find_near_duplicates,
+)
 from app.services.import_normalizer import normalize_row
 from app.services.import_validator import OPTION_LABELS, ValidationResult, validate_row
 from app.services.parsers import detect_adapter as _detect_adapter
@@ -319,16 +323,39 @@ def parse_and_stage(
             else:
                 seen_hashes[h] = parsed_row.row_number
 
+        # Near-duplicate (non-blocking). Only run when row is still 'ok'
+        # after exact-dedup — saves a query for rows we already plan to
+        # skip. Match payload is stored in normalized_data so the preview
+        # template can render a "Similar to #N" chip.
+        canonical = validation.canonical or {}
+        near_dup_msg: str | None = None
+        if validation.status == ImportItemStatus.ok and canonical.get("question_text"):
+            matches = find_near_duplicates(
+                session,
+                exam_id=imp.target_exam_id,
+                question_text=canonical["question_text"],
+                threshold=settings.import_near_duplicate_threshold,
+            )
+            if matches:
+                top = matches[0]
+                canonical["_near_duplicate_match"] = [m.to_dict() for m in matches]
+                near_dup_msg = (
+                    f"Similar to question #{top.question_id} "
+                    f"(similarity {top.similarity:.2f}). Imports as a new question by default; "
+                    "skip this row to suppress."
+                )
+                validation.status = ImportItemStatus.warning
+
         item = ImportItem(
             import_id=imp.id,
             row_number=parsed_row.row_number,
             sheet_name=parsed_row.sheet_name,
             raw_data=_jsonable(parsed_row.raw),
-            normalized_data=_jsonable(_canonical_to_jsonable(validation.canonical)),
+            normalized_data=_jsonable(_canonical_to_jsonable(canonical)),
             content_hash=h,
             status=validation.status,
             error_message=validation.error_message,
-            warning_message=dup_message or validation.warning_message,
+            warning_message=dup_message or near_dup_msg or validation.warning_message,
         )
         session.add(item)
         counts[validation.status.value] = counts.get(validation.status.value, 0) + 1
@@ -367,17 +394,24 @@ def toggle_row(
     request_id: str | None,
     item_id: int,
 ) -> ImportItem:
-    """Flip `ok` ↔ `skipped`. Other statuses are immutable here."""
+    """Flip `ok|warning` ↔ `skipped`. Other statuses are immutable here.
+
+    `warning` rows can be skipped (admin opt-out for near-duplicates) and
+    re-selected back to `ok` (note: a re-selected warning row loses its
+    warning state — the admin saw it and chose to import).
+    """
     item = session.get(ImportItem, item_id)
     if item is None:
         raise ImportNotFoundError(f"import_item {item_id} not found")
     old = item.status.value
-    if item.status == ImportItemStatus.ok:
+    if item.status in (ImportItemStatus.ok, ImportItemStatus.warning):
         item.status = ImportItemStatus.skipped
     elif item.status == ImportItemStatus.skipped:
         item.status = ImportItemStatus.ok
     else:
-        raise ImportStateError(f"cannot toggle item in status {old!r}; only ok/skipped")
+        raise ImportStateError(
+            f"cannot toggle item in status {old!r}; only ok/warning/skipped"
+        )
     write_audit_log(
         session,
         actor_type=ActorType.user,
@@ -427,11 +461,14 @@ def confirm_import(
             "Please complete the mapping step before confirming."
         )
 
+    # Confirm imports both `ok` and `warning` rows. Warnings (validator
+    # soft-warnings + near-duplicate matches) are advisory: the row still
+    # imports unless the admin explicitly toggles it to `skipped`.
     items = list(
         session.scalars(
             select(ImportItem)
             .where(ImportItem.import_id == imp.id)
-            .where(ImportItem.status == ImportItemStatus.ok)
+            .where(ImportItem.status.in_((ImportItemStatus.ok, ImportItemStatus.warning)))
             .where(ImportItem.question_id.is_(None))
             .order_by(ImportItem.row_number)
         )

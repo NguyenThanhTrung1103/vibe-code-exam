@@ -31,9 +31,12 @@ CANONICAL_FIELDS = (
     "option_c",
     "option_d",
     "option_e",
-    # `combined_options` — alternative to mapping option_a/b/c/d/e individually.
+    "option_f",
+    "option_g",
+    "option_h",
+    # `combined_options` — alternative to mapping option_a/b/.../h individually.
     # When mapped, the normalizer splits the cell value on `;` / `；` / newline
-    # into option_a..option_f, so dump-style sheets with a single answer-list
+    # into option_a..option_h, so dump-style sheets with a single answer-list
     # column work end-to-end without admin pre-processing.
     "combined_options",
     "correct_answer",
@@ -50,6 +53,8 @@ CANONICAL_FIELDS = (
     "vote_d",
     "vote_e",
     "vote_f",
+    "vote_g",
+    "vote_h",
 )
 REQUIRED_FIELDS = ("question_text", "option_a", "option_b", "correct_answer")
 MAX_COLUMNS = 32  # safety cap — too-wide sheet → reject.
@@ -69,25 +74,51 @@ _ALIAS = {
     "difficulty": "difficulty",
     "topic": "topic",
     "topics": "topic",
+    "subject": "topic",
     "a": "option_a",
     "optiona": "option_a",
+    "choicea": "option_a",
+    "answera": "option_a",
     "b": "option_b",
     "optionb": "option_b",
+    "choiceb": "option_b",
+    "answerb": "option_b",
     "c": "option_c",
     "optionc": "option_c",
+    "choicec": "option_c",
+    "answerc": "option_c",
     "d": "option_d",
     "optiond": "option_d",
+    "choiced": "option_d",
+    "answerd": "option_d",
     "e": "option_e",
     "optione": "option_e",
+    "choicee": "option_e",
+    "answere": "option_e",
+    "f": "option_f",
+    "optionf": "option_f",
+    "choicef": "option_f",
+    "answerf": "option_f",
+    "g": "option_g",
+    "optiong": "option_g",
+    "choiceg": "option_g",
+    "answerg": "option_g",
+    "h": "option_h",
+    "optionh": "option_h",
+    "choiceh": "option_h",
+    "answerh": "option_h",
     "correct": "correct_answer",
     "correctanswer": "correct_answer",
     "answer": "correct_answer",
+    "key": "correct_answer",
+    "answerkey": "correct_answer",
     "explanation": "explanation",
     "rationale": "explanation",
     "reference": "reference",
     "url": "reference",
     "ref": "reference",
     "tags": "tags",
+    "tag": "tags",
     # --- Phase 13 community-signal aliases ---
     "discussionurl": "discussion_url",
     "discussion": "discussion_url",
@@ -102,6 +133,8 @@ _ALIAS = {
     "voted": "vote_d",
     "votee": "vote_e",
     "votef": "vote_f",
+    "voteg": "vote_g",
+    "voteh": "vote_h",
     # --- Vietnamese / dump-style aliases (accent-stripped form) ---
     "cauhoi": "question_text",  # "Câu hỏi"
     "noidungcauhoi": "question_text",  # "Nội dung câu hỏi"

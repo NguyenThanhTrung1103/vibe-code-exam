@@ -13,15 +13,18 @@ API/JSON callers continue to receive 401 unchanged.
 from __future__ import annotations
 
 from collections.abc import Callable
+from dataclasses import dataclass
 from typing import Annotated
 from urllib.parse import quote
 
 from fastapi import Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
 
+from app.auth.guest_token import GUEST_COOKIE_NAME, verify_guest_token
 from app.auth.service import get_user
 from app.auth.session import read_session_user_id
 from app.deps import SessionDep
+from app.models.attempts import Attempt
 from app.models.enums import UserRole
 from app.models.users import User
 
@@ -105,3 +108,68 @@ CurrentUser = Annotated[User, Depends(get_current_user_required)]
 OptionalUser = Annotated[User | None, Depends(get_current_user)]
 RequireAdmin = Annotated[User, Depends(require_role(UserRole.admin))]
 RequireStudent = Annotated[User, Depends(require_role(UserRole.student))]
+
+
+# ---------------------------------------------------------------------------
+# Phase 18 — guest-aware attempt ownership
+# ---------------------------------------------------------------------------
+
+
+@dataclass(slots=True)
+class AttemptOwner:
+    """Resolved owner of an attempt: either an authenticated user OR a guest.
+
+    Exactly one of `user` / `guest_token` is non-None. Routes use this to
+    decide which actor to thread into the service layer (`actor=owner.user`
+    when `owner.user` is set, else `actor=None` for guest paths).
+    """
+
+    attempt: Attempt
+    user: User | None
+    guest_token: str | None  # raw UUID (already verified)
+
+    @property
+    def is_guest(self) -> bool:
+        return self.user is None
+
+
+def get_attempt_owner(
+    attempt_id: int,
+    request: Request,
+    session: SessionDep,
+) -> AttemptOwner:
+    """Resolve and authorise the owner of `attempt_id`.
+
+    Checks (in order):
+      1. Attempt exists and is not soft-deleted (404 otherwise).
+      2. If the request carries a valid auth session AND the attempt's
+         `user_id` matches that user → user-owner.
+      3. Else if the request carries a valid signed `guest_token` cookie
+         AND the attempt's `guest_token` matches → guest-owner.
+      4. Anything else → 403.
+
+    Returning a typed dataclass keeps callers honest: route handlers must
+    decide explicitly whether to thread an authenticated `actor` or pass
+    `actor=None` (guest path) into the service layer.
+    """
+    attempt = session.get(Attempt, attempt_id)
+    if attempt is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="attempt not found")
+
+    # Auth-user path
+    user_id = read_session_user_id(request)
+    if user_id is not None:
+        user = get_user(session, user_id)
+        if user is not None and attempt.user_id == user.id:
+            return AttemptOwner(attempt=attempt, user=user, guest_token=None)
+
+    # Guest path — verify signed cookie matches the attempt's stored token.
+    cookie = request.cookies.get(GUEST_COOKIE_NAME)
+    raw = verify_guest_token(cookie)
+    if raw is not None and attempt.guest_token is not None and attempt.guest_token == raw:
+        return AttemptOwner(attempt=attempt, user=None, guest_token=raw)
+
+    raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="forbidden")
+
+
+AttemptOwnerDep = Annotated[AttemptOwner, Depends(get_attempt_owner)]

@@ -1,15 +1,25 @@
+{# htmx fragment for /search/exams. Rendered into #search-results on home. #}
 {% if not q %}
-  {# blank query — empty state #}
+  {# blank query — empty state, render nothing #}
 {% elif not rows %}
-  <p>No published exams matched <em>{{ q }}</em>.</p>
+  <p class="text-on-surface-variant py-md text-center">
+    No published exams matched <em class="text-on-surface">{{ q }}</em>.
+  </p>
 {% else %}
-  <ul class="search-results">
+  <ul class="bg-surface-container-lowest border border-outline-variant rounded-xl divide-y divide-outline-variant overflow-hidden shadow-sm">
     {% for exam, course, provider in rows %}
       <li>
-        <a href="/exams/{{ provider.slug }}/{{ exam.slug }}">
-          {{ provider.name }} · {{ exam.code or exam.name }}
+        <a href="/exams/{{ provider.slug }}/{{ exam.slug }}"
+           class="flex items-center justify-between gap-md px-lg py-md hover:bg-surface-container-low transition-colors">
+          <div class="min-w-0">
+            <div class="font-body-md text-on-surface truncate">
+              <span class="text-caption font-label-md text-primary bg-primary/10 px-sm py-0.5 rounded mr-xs">{{ provider.name }}</span>
+              {{ exam.code or exam.name }}
+            </div>
+            <small class="text-caption text-on-surface-variant">{{ course.name }}</small>
+          </div>
+          <span class="material-symbols-outlined text-on-surface-variant flex-shrink-0">arrow_forward</span>
         </a>
-        <small>{{ course.name }}</small>
       </li>
     {% endfor %}
   </ul>
