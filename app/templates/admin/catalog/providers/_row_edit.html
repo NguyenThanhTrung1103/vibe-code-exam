@@ -1,0 +1,22 @@
+<tr id="provider-{{ row.id }}">
+  <td colspan="4">
+    <form hx-post="/admin/providers/{{ row.id }}/edit"
+          hx-target="#provider-{{ row.id }}"
+          hx-swap="outerHTML"
+          class="catalog-edit-form">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <label>Name <input name="name" required maxlength="128" value="{{ row.name }}" autofocus></label>
+      <label>Slug <input name="slug" required maxlength="64" value="{{ row.slug }}"></label>
+      <label>Description <input name="description" maxlength="4000" value="{{ row.description or '' }}"></label>
+      <label>Logo URL <input name="logo_url" type="url" value="{{ row.logo_url or '' }}"></label>
+      <button class="btn" type="submit">Save</button>
+      <button class="btn"
+              type="button"
+              hx-get="/admin/providers/{{ row.id }}/cancel-edit"
+              hx-target="#provider-{{ row.id }}"
+              hx-swap="outerHTML">
+        Cancel
+      </button>
+    </form>
+  </td>
+</tr>

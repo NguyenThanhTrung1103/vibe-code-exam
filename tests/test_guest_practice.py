@@ -297,3 +297,96 @@ def test_guest_cannot_access_anothers_attempt(client, nonce):
     client.cookies.clear()
     forbidden = client.get(location)
     assert forbidden.status_code == 403
+
+
+# ---------------------------------------------------------------------------
+# Mode + question_count (Learning vs Mock Exam)
+# ---------------------------------------------------------------------------
+
+
+def test_guest_start_accepts_mode_exam(client, nonce):
+    """Mock Exam Mode — guest POSTs `mode=exam` and the attempt is created
+    with `AttemptMode.exam`."""
+    admin = _make_admin(nonce)
+    exam_id = _seed_published_exam(admin, nonce, n_questions=2)
+    r = client.post(
+        f"/practice/{exam_id}/start",
+        data={"mode": "exam"},
+        follow_redirects=False,
+    )
+    assert r.status_code == 303
+    attempt_id = int(r.headers["location"].split("/")[2])
+    with SessionLocal() as s:
+        a = s.get(Attempt, attempt_id)
+        assert a is not None
+        assert a.mode.value == "exam"
+
+
+def test_guest_start_rejects_unsupported_mode(client, nonce):
+    admin = _make_admin(nonce)
+    exam_id = _seed_published_exam(admin, nonce)
+    r = client.post(
+        f"/practice/{exam_id}/start",
+        data={"mode": "garbage"},
+        follow_redirects=False,
+    )
+    assert r.status_code == 400
+
+
+def test_mock_exam_subsets_to_question_count(client, nonce):
+    """When `question_count=3` is sent against a 5-question bank, the
+    Attempt should have exactly 3 AttemptAnswer rows (random subset)."""
+    admin = _make_admin(nonce)
+    exam_id = _seed_published_exam(admin, nonce, n_questions=5)
+    r = client.post(
+        f"/practice/{exam_id}/start",
+        data={"mode": "exam", "question_count": "3"},
+        follow_redirects=False,
+    )
+    assert r.status_code == 303
+    attempt_id = int(r.headers["location"].split("/")[2])
+    with SessionLocal() as s:
+        a = s.get(Attempt, attempt_id)
+        assert a is not None
+        assert a.total_questions == 3
+        rows = s.scalars(
+            select(AttemptAnswer).where(AttemptAnswer.attempt_id == attempt_id)
+        ).all()
+        assert len(rows) == 3
+
+
+def test_mock_exam_default_count_caps_at_total(client, nonce):
+    """If exam has fewer than the default mock size (35), the attempt uses all
+    available questions — no padding, no error."""
+    admin = _make_admin(nonce)
+    exam_id = _seed_published_exam(admin, nonce, n_questions=4)
+    r = client.post(
+        f"/practice/{exam_id}/start",
+        data={"mode": "exam"},  # no question_count → default 35, capped at 4
+        follow_redirects=False,
+    )
+    assert r.status_code == 303
+    attempt_id = int(r.headers["location"].split("/")[2])
+    with SessionLocal() as s:
+        a = s.get(Attempt, attempt_id)
+        assert a is not None
+        assert a.total_questions == 4
+
+
+def test_learning_mode_uses_all_questions(client, nonce):
+    """Learning Mode ignores question_count — the learner studies the full
+    bank, not a random subset."""
+    admin = _make_admin(nonce)
+    exam_id = _seed_published_exam(admin, nonce, n_questions=5)
+    r = client.post(
+        f"/practice/{exam_id}/start",
+        data={"mode": "practice", "question_count": "2"},  # ignored
+        follow_redirects=False,
+    )
+    assert r.status_code == 303
+    attempt_id = int(r.headers["location"].split("/")[2])
+    with SessionLocal() as s:
+        a = s.get(Attempt, attempt_id)
+        assert a is not None
+        assert a.mode.value == "practice"
+        assert a.total_questions == 5

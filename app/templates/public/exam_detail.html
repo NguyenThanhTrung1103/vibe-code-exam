@@ -1,10 +1,10 @@
 {% extends "public/_layout.html" %}
-{% block title %}{{ exam.name }} — {{ provider.name }}{% endblock %}
+{% block title %}{{ exam.name }} — {{ provider.name | pretty_vendor }}{% endblock %}
 {% block content %}
 <section class="py-xl max-w-container-max mx-auto px-lg">
   <nav class="text-caption text-on-surface-variant mb-md" aria-label="Breadcrumb">
     <a href="/vendors" class="hover:text-primary">Vendors</a> ›
-    <a href="/vendors/{{ provider.slug }}" class="hover:text-primary">{{ provider.name }}</a> ›
+    <a href="/vendors/{{ provider.slug }}" class="hover:text-primary">{{ provider.name | pretty_vendor }}</a> ›
     <span class="text-on-surface">{{ exam.name }}</span>
   </nav>
 
@@ -15,7 +15,7 @@
         Code: <code class="bg-surface-container-low px-sm py-0.5 rounded font-mono text-[14px]">{{ exam.code }}</code>
       </p>
     {% endif %}
-    <p class="font-body-md text-on-surface mt-xs"><strong>{{ course.name }}</strong> · {{ provider.name }}</p>
+    <p class="font-body-md text-on-surface mt-xs"><strong>{{ course.name }}</strong> · {{ provider.name | pretty_vendor }}</p>
     {% if exam.description %}
       <p class="font-body-md text-on-surface-variant mt-md max-w-3xl">{{ exam.description }}</p>
     {% endif %}
@@ -62,33 +62,64 @@
     </section>
   {% endif %}
 
-  <section class="bg-surface-container-low p-lg rounded-xl border border-outline-variant">
+  {# CTA — guest-friendly. Both Learning and Mock POST to the same
+     `/practice/{id}/start` endpoint, which routes authenticated users
+     through start_attempt (linked to user) and guests through
+     start_guest_attempt (signed cookie). No login required. #}
+  <section>
     {% if published_question_count == 0 %}
-      <div class="inline-flex items-center gap-sm bg-tertiary-fixed text-on-tertiary-fixed-variant px-md py-sm rounded-full text-label-md font-label-md mb-sm" role="status">
-        <span class="material-symbols-outlined text-[18px]">schedule</span>
-        Coming soon — no questions yet
+      <div class="bg-surface-container-low p-lg rounded-xl border border-outline-variant">
+        <div class="inline-flex items-center gap-sm bg-tertiary-fixed text-on-tertiary-fixed-variant px-md py-sm rounded-full text-label-md font-label-md mb-sm" role="status">
+          <span class="material-symbols-outlined text-[18px]">schedule</span>
+          Coming soon — no questions yet
+        </div>
+        <p class="text-on-surface-variant">This exam is published but has no questions yet. Check back later.</p>
       </div>
-      <p class="text-on-surface-variant">This exam is published but has no questions yet. Check back later.</p>
     {% else %}
-      {% if current_user %}
-        <form method="post" action="/attempts/start" class="flex flex-wrap items-center gap-md">
-          <input type="hidden" name="csrf_token" value="{{ csrf_token if csrf_token is defined else '' }}" />
-          <input type="hidden" name="exam_id" value="{{ exam.id }}" />
-          <button class="inline-flex items-center gap-xs bg-primary hover:bg-primary-container text-on-primary font-label-md px-lg py-md rounded-lg transition-all active:scale-[0.98] shadow-md"
-                  type="submit" name="mode" value="practice">
-            <span class="material-symbols-outlined text-[18px]">play_arrow</span> Start practice
-          </button>
-          <button class="inline-flex items-center gap-xs bg-surface-container-high hover:bg-surface-container-highest text-on-surface font-label-md px-lg py-md rounded-lg transition-all active:scale-[0.98] border border-outline-variant"
-                  type="submit" name="mode" value="exam">
-            <span class="material-symbols-outlined text-[18px]">timer</span> Start full exam
+      {% set mock_default = 20 if published_question_count >= 20 else published_question_count %}
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-md">
+        <form method="post" action="/practice/{{ exam.id }}/start"
+              class="bg-surface-container-lowest p-lg rounded-xl border border-outline-variant flex flex-col">
+          <div class="flex items-center gap-sm mb-xs">
+            <span class="material-symbols-outlined text-primary">school</span>
+            <h3 class="font-h3 text-h3 text-on-surface">Learning Mode</h3>
+          </div>
+          <p class="font-body-md text-on-surface-variant mb-md">
+            Study mode. After you select an answer, the correct answer and explanation appear immediately.
+            Uses all {{ published_question_count }} questions.
+          </p>
+          <input type="hidden" name="mode" value="practice" />
+          <button type="submit"
+                  class="mt-auto inline-flex items-center justify-center gap-xs bg-primary hover:bg-primary-container text-on-primary font-label-md px-lg py-md rounded-lg transition-all active:scale-[0.98] shadow-md">
+            <span class="material-symbols-outlined text-[18px]">play_arrow</span>
+            Start learning
           </button>
         </form>
-      {% else %}
-        <a class="inline-flex items-center gap-xs bg-primary hover:bg-primary-container text-on-primary font-label-md px-lg py-md rounded-lg transition-all shadow-md"
-           href="/auth/login?next=/exams/{{ provider.slug }}/{{ exam.slug }}">
-          <span class="material-symbols-outlined text-[18px]">login</span> Log in to start an attempt
-        </a>
-      {% endif %}
+
+        <form method="post" action="/practice/{{ exam.id }}/start"
+              class="bg-surface-container-lowest p-lg rounded-xl border border-outline-variant flex flex-col">
+          <div class="flex items-center gap-sm mb-xs">
+            <span class="material-symbols-outlined text-tertiary">timer</span>
+            <h3 class="font-h3 text-h3 text-on-surface">Mock Exam</h3>
+          </div>
+          <p class="font-body-md text-on-surface-variant mb-md">
+            Timed-style mock with a random subset of questions. Answers and explanations are hidden until you submit.
+          </p>
+          <label class="block text-caption text-on-surface-variant mb-xs" for="question_count_{{ exam.id }}">
+            Number of questions (max {{ published_question_count }})
+          </label>
+          <input id="question_count_{{ exam.id }}" type="number" name="question_count"
+                 min="1" max="{{ published_question_count }}" value="{{ mock_default }}"
+                 class="block w-full px-md py-sm border border-outline-variant rounded font-body-md mb-md bg-surface-container-lowest" />
+          <input type="hidden" name="mode" value="exam" />
+          <button type="submit"
+                  class="mt-auto inline-flex items-center justify-center gap-xs bg-tertiary hover:bg-tertiary-container text-on-tertiary font-label-md px-lg py-md rounded-lg transition-all active:scale-[0.98] shadow-md">
+            <span class="material-symbols-outlined text-[18px]">timer</span>
+            Start mock exam
+          </button>
+        </form>
+      </div>
+      <p class="text-caption text-on-surface-variant mt-md">No login required.</p>
     {% endif %}
   </section>
 </section>

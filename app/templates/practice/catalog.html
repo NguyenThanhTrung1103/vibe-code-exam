@@ -14,14 +14,30 @@
     {% for ex in exams %}
     <li class="exam-card">
       <div>
-        <div class="exam-card-meta">{{ ex.provider }} · {{ ex.course }}</div>
+        <div class="exam-card-meta">{{ ex.provider | pretty_vendor }} · {{ ex.course }}</div>
         <div class="exam-card-title">{{ ex.title }}</div>
         <div class="exam-card-count">{{ ex.question_count }} question{{ '' if ex.question_count == 1 else 's' }}</div>
       </div>
       {% if ex.question_count > 0 %}
-      <form method="post" action="/practice/{{ ex.id }}/start" class="start-form">
-        <button type="submit" class="btn-start">Start Practice →</button>
-      </form>
+      <div class="start-actions">
+        <form method="post" action="/practice/{{ ex.id }}/start" class="start-form">
+          <input type="hidden" name="mode" value="practice" />
+          <button type="submit" class="btn-start">Learning Mode →</button>
+        </form>
+        {% set default_mock = 20 if ex.question_count >= 20 else ex.question_count %}
+        <form method="post" action="/practice/{{ ex.id }}/start" class="start-form mock-form">
+          <input type="hidden" name="mode" value="exam" />
+          <label class="mock-count-label">
+            <span class="mock-count-text">Questions</span>
+            <input type="number" name="question_count"
+                   min="1" max="{{ ex.question_count }}"
+                   value="{{ default_mock }}"
+                   inputmode="numeric"
+                   required />
+          </label>
+          <button type="submit" class="btn-start btn-start-mock">Mock Exam →</button>
+        </form>
+      </div>
       {% else %}
       <span class="muted">Coming soon</span>
       {% endif %}

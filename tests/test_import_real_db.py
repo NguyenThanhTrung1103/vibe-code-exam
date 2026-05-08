@@ -254,11 +254,12 @@ def test_full_flow_upload_parse_confirm(nonce: str) -> None:
         assert summary["imported"] == 3
         assert summary["errors"] == 0
 
-        # Imported questions are private/draft.
+        # Confirmed questions are auto-published — Exam.publish_status remains
+        # the single on/off switch the admin uses to expose/hide a whole exam.
         questions = list(s.scalars(select(Question).where(Question.source_import_id == imp.id)))
         assert len(questions) == 3
         for q in questions:
-            assert q.status == QuestionStatus.imported
+            assert q.status == QuestionStatus.published
             assert q.source_locator is not None
             assert q.source_locator["import_id"] == imp.id
             assert q.source_locator["row_number"] >= 2

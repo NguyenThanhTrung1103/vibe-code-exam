@@ -3,6 +3,13 @@
   <td><code>{{ row.slug }}</code></td>
   <td>{{ (row.description or "")[:80] }}</td>
   <td>
+    <button class="btn"
+            type="button"
+            hx-get="/admin/providers/{{ row.id }}/edit"
+            hx-target="#provider-{{ row.id }}"
+            hx-swap="outerHTML">
+      Rename
+    </button>
     <button class="btn btn-danger"
             type="button"
             hx-post="/admin/providers/{{ row.id }}/delete"

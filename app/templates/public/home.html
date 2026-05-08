@@ -61,14 +61,15 @@
            href="/vendors/{{ p.slug }}">
           <div class="aspect-square bg-surface-container-low rounded-lg mb-md flex items-center justify-center p-md overflow-hidden">
             {% if p.logo_url %}
-              <img alt="{{ p.name }} logo"
+              <img alt="{{ p.name | pretty_vendor }} logo"
+                   onerror="this.style.display='none'"
                    class="max-w-full max-h-full grayscale group-hover:grayscale-0 transition-all object-contain"
                    src="{{ p.logo_url }}" />
             {% else %}
-              <span class="font-h1 text-[32px] text-primary/30 group-hover:text-primary transition-colors">{{ p.name[0] | upper }}</span>
+              <span class="font-h1 text-[32px] text-primary/30 group-hover:text-primary transition-colors">{{ (p.name | pretty_vendor)[:1] | upper or '?' }}</span>
             {% endif %}
           </div>
-          <span class="font-h3 text-[16px] text-on-surface group-hover:text-primary transition-colors">{{ p.name }}</span>
+          <span class="font-h3 text-[16px] text-on-surface group-hover:text-primary transition-colors">{{ p.name | pretty_vendor }}</span>
         </a>
       {% endfor %}
     </div>
@@ -92,7 +93,7 @@
               <span class="material-symbols-outlined text-[32px]">school</span>
             </div>
             <div class="flex-grow min-w-0">
-              <span class="text-caption font-label-md text-primary bg-primary/10 px-sm py-0.5 rounded mb-xs inline-block">{{ provider.name }}</span>
+              <span class="text-caption font-label-md text-primary bg-primary/10 px-sm py-0.5 rounded mb-xs inline-block">{{ provider.name | pretty_vendor }}</span>
               <h3 class="font-h3 text-h3 text-on-surface truncate">{{ exam.code or exam.name }}</h3>
               <p class="font-body-md text-on-surface-variant truncate">{{ course.name }}</p>
             </div>

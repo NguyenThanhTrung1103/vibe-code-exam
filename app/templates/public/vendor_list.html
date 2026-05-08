@@ -15,14 +15,15 @@
            href="/vendors/{{ p.slug }}">
           <div class="aspect-square bg-surface-container-low rounded-lg mb-md flex items-center justify-center p-md overflow-hidden">
             {% if p.logo_url %}
-              <img alt="{{ p.name }} logo"
+              <img alt="{{ p.name | pretty_vendor }} logo"
+                   onerror="this.style.display='none'"
                    class="max-w-full max-h-full grayscale group-hover:grayscale-0 transition-all object-contain"
                    src="{{ p.logo_url }}" />
             {% else %}
-              <span class="font-h1 text-[32px] text-primary/30 group-hover:text-primary transition-colors">{{ p.name[0] | upper }}</span>
+              <span class="font-h1 text-[32px] text-primary/30 group-hover:text-primary transition-colors">{{ (p.name | pretty_vendor)[:1] | upper or '?' }}</span>
             {% endif %}
           </div>
-          <span class="font-h3 text-[16px] text-on-surface group-hover:text-primary transition-colors block mb-xs">{{ p.name }}</span>
+          <span class="font-h3 text-[16px] text-on-surface group-hover:text-primary transition-colors block mb-xs">{{ p.name | pretty_vendor }}</span>
           {% if p.description %}
             <p class="text-caption text-on-surface-variant line-clamp-2">{{ p.description[:120] }}</p>
           {% endif %}

@@ -33,6 +33,40 @@ def list_providers(request: Request, user: RequireAdmin, session: SessionDep) ->
     )
 
 
+@router.get("/{provider_id}/edit", response_class=HTMLResponse)
+def edit_provider_form(
+    request: Request,
+    provider_id: int,
+    user: RequireAdmin,
+    session: SessionDep,
+) -> HTMLResponse:
+    """Inline edit form partial — swapped into the row by the Rename button."""
+    row = session.get(Provider, provider_id)
+    if row is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="provider not found")
+    return render_with_csrf(
+        request,
+        "admin/catalog/providers/_row_edit.html",
+        {"row": row},
+    )
+
+
+@router.get("/{provider_id}/cancel-edit", response_class=HTMLResponse)
+def cancel_edit_provider(
+    request: Request,
+    provider_id: int,
+    user: RequireAdmin,
+    session: SessionDep,
+) -> HTMLResponse:
+    """Cancel inline edit — swap row back to read-only `_row.html` partial."""
+    row = session.get(Provider, provider_id)
+    if row is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="provider not found")
+    return templates.TemplateResponse(
+        request, "admin/catalog/providers/_row.html", {"row": row}
+    )
+
+
 @router.post("", response_class=HTMLResponse)
 def create_provider(
     request: Request,

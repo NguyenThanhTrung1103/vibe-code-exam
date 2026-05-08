@@ -538,13 +538,17 @@ def _create_question_from_item(
 
     qtype = canonical.get("question_type") or "single"
 
+    # Auto-publish on confirm: admin already reviewed each row in the preview
+    # step, so the second per-question publish gate is dead weight for a
+    # simple-dump product. `Exam.publish_status` remains the single on/off
+    # switch the admin uses to expose / hide a whole exam.
     question = Question(
         exam_id=imp.target_exam_id,
         topic_id=None,  # admin assigns in Phase 06; topic strings ignored here
         question_text=canonical.get("question_text") or "",
         question_type=QuestionType(qtype),
         difficulty=None,  # canonical has 'difficulty' string; mapping to enum below
-        status=QuestionStatus.imported,
+        status=QuestionStatus.published,
         content_hash=item.content_hash,
         given_answer=",".join(correct) if correct else None,
         confidence_level=ConfidenceLevel.unknown,
@@ -557,6 +561,7 @@ def _create_question_from_item(
         },
         source_import_id=imp.id,
         verification_ttl_days=90,
+        last_verified_at=datetime.now(UTC),
     )
     diff = canonical.get("difficulty")
     if diff in ("easy", "medium", "hard"):

@@ -212,11 +212,16 @@ def start_attempt(
     request_id: str | None,
     exam_id: int,
     mode: AttemptMode,
+    question_count: int | None = None,
 ) -> Attempt:
     """Create a new attempt with frozen `order_index`. Caller commits.
 
     Raises `AttemptValidationError` for empty / unpublished exams.
     Resumes an existing in-progress attempt if one exists for (user, exam).
+
+    `question_count` is an optional cap on the number of questions in the
+    attempt — used by Mock Exam mode to randomly subset (e.g. 35 of 57).
+    None = use all available questions.
     """
     exam = session.get(Exam, exam_id)
     if exam is None or not _exam_publishable(exam):
@@ -258,6 +263,8 @@ def start_attempt(
 
     by_id = {q.id: q for q in questions}
     ordered_ids = shuffled_question_ids(questions)
+    if question_count is not None and question_count > 0:
+        ordered_ids = ordered_ids[:question_count]
 
     attempt = Attempt(
         user_id=actor.id,
@@ -309,21 +316,31 @@ def start_guest_attempt(
     request_id: str | None,
     exam_id: int,
     guest_token: str,
+    mode: AttemptMode = AttemptMode.practice,
+    question_count: int | None = None,
 ) -> Attempt:
-    """Phase 18 — start (or resume) a practice attempt for an anonymous guest.
+    """Phase 18 — start (or resume) an attempt for an anonymous guest.
 
-    Same shape as `start_attempt(actor=user, mode=practice)` but:
+    Same shape as `start_attempt(actor=user, mode=...)` but:
       * `attempt.user_id = None`, `attempt.guest_token = guest_token`
       * Resumes the most recent in-progress attempt for
         `(exam_id, guest_token)` so refreshing the start endpoint with
         the same cookie does not stack new attempts.
       * Audits as `ActorType.system` because there is no stable principal.
 
+    `mode` defaults to practice (Learning Mode); pass `AttemptMode.exam` for
+    Mock Exam Mode. `question_count` optionally caps the random subset
+    (e.g. 35 of 57) — used by Mock Exam.
+
     Caller is responsible for verifying the cookie signature before
     calling this. `guest_token` is the raw UUID, not the signed cookie.
     """
     if not guest_token:
         raise AttemptValidationError("guest_token required")
+    if mode not in (AttemptMode.practice, AttemptMode.exam):
+        raise AttemptValidationError(
+            f"mode {mode!r} not supported for guests (use practice or exam)"
+        )
 
     exam = session.get(Exam, exam_id)
     if exam is None or not _exam_publishable(exam):
@@ -360,13 +377,15 @@ def start_guest_attempt(
 
     by_id = {q.id: q for q in questions}
     ordered_ids = shuffled_question_ids(questions)
+    if question_count is not None and question_count > 0:
+        ordered_ids = ordered_ids[:question_count]
 
     attempt = Attempt(
         user_id=None,
         guest_token=guest_token,
         exam_id=exam_id,
         exam_version=exam.exam_version,
-        mode=AttemptMode.practice,
+        mode=mode,
         started_at=datetime.now(UTC),
         total_questions=len(ordered_ids),
     )
@@ -396,7 +415,7 @@ def start_guest_attempt(
         entity_id=attempt.id,
         new_value={
             "exam_id": exam_id,
-            "mode": AttemptMode.practice.value,
+            "mode": mode.value,
             "total_questions": len(ordered_ids),
             "exam_version": exam.exam_version,
             "guest": True,

@@ -11,6 +11,8 @@
     <nav class="hidden md:flex items-center gap-xl">
       <a href="/"
          class="font-label-md text-label-md py-2 transition-colors {% if path == '/' %}text-primary dark:text-primary-fixed font-bold border-b-2 border-primary{% else %}text-on-secondary-container dark:text-secondary-fixed-dim hover:text-primary-container{% endif %}">Home</a>
+      <a href="/practice"
+         class="font-label-md text-label-md py-2 transition-colors {% if path.startswith('/practice') %}text-primary dark:text-primary-fixed font-bold border-b-2 border-primary{% else %}text-on-secondary-container dark:text-secondary-fixed-dim hover:text-primary-container{% endif %}">Practice</a>
       <a href="/vendors"
          class="font-label-md text-label-md py-2 transition-colors {% if path.startswith('/vendors') or path.startswith('/exams') %}text-primary dark:text-primary-fixed font-bold border-b-2 border-primary{% else %}text-on-secondary-container dark:text-secondary-fixed-dim hover:text-primary-container{% endif %}">Vendors</a>
       {% if current_user and current_user.role.value == 'admin' %}

@@ -1,22 +1,24 @@
 {% extends "public/_layout.html" %}
-{% block title %}{{ provider.name }} exams — Exam Platform{% endblock %}
+{% block title %}{{ provider.name | pretty_vendor }} exams — Exam Platform{% endblock %}
 {% block content %}
 <section class="py-xl max-w-container-max mx-auto px-lg">
   <nav class="text-caption text-on-surface-variant mb-md" aria-label="Breadcrumb">
     <a href="/vendors" class="hover:text-primary">Vendors</a> ›
-    <span class="text-on-surface">{{ provider.name }}</span>
+    <span class="text-on-surface">{{ provider.name | pretty_vendor }}</span>
   </nav>
 
   <header class="flex items-center gap-lg mb-xl pb-lg border-b border-outline-variant">
     <div class="w-20 h-20 bg-surface-container-low rounded-xl flex items-center justify-center p-md flex-shrink-0">
       {% if provider.logo_url %}
-        <img alt="{{ provider.name }} logo" class="max-w-full max-h-full object-contain" src="{{ provider.logo_url }}" />
+        <img alt="{{ provider.name | pretty_vendor }} logo"
+             onerror="this.style.display='none'"
+             class="max-w-full max-h-full object-contain" src="{{ provider.logo_url }}" />
       {% else %}
-        <span class="font-h1 text-h1 text-primary/40">{{ provider.name[0] | upper }}</span>
+        <span class="font-h1 text-h1 text-primary/40">{{ (provider.name | pretty_vendor)[:1] | upper or '?' }}</span>
       {% endif %}
     </div>
     <div>
-      <h1 class="font-h1 text-h1 text-on-surface mb-xs">{{ provider.name }}</h1>
+      <h1 class="font-h1 text-h1 text-on-surface mb-xs">{{ provider.name | pretty_vendor }}</h1>
       {% if provider.description %}
         <p class="font-body-md text-on-surface-variant max-w-3xl">{{ provider.description }}</p>
       {% endif %}
@@ -24,7 +26,7 @@
   </header>
 
   {% if not courses %}
-    <p class="text-on-surface-variant">No published exams for {{ provider.name }} yet.</p>
+    <p class="text-on-surface-variant">No published exams for {{ provider.name | pretty_vendor }} yet.</p>
   {% else %}
     {% for bucket in courses %}
       <section class="mb-xl">

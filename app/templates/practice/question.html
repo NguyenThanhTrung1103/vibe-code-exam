@@ -66,11 +66,26 @@
           <p class="select-n-hint"><strong>Select {{ correct_count }} answers</strong></p>
         {% endif %}
 
+        {# Practice (Learning Mode): after the answer is autosaved, reload
+           the page with this question's position appended to ?reveal so
+           server re-renders with the correct answer + explanation visible.
+           Exam mode skips the reload — answers stay hidden until submit. #}
         <form
               hx-post="/attempts/{{ page.attempt.id }}/q/{{ position }}/answer"
-              hx-trigger="change delay:500ms"
+              hx-trigger="change delay:300ms"
               hx-include="this"
-              hx-swap="none">
+              hx-swap="none"
+              {% if page.attempt.mode.value == 'practice' %}
+              hx-on::after-request="if(event.detail.successful){
+                const u=new URL(window.location.href);
+                const r=(u.searchParams.get('reveal')||'').split(',').filter(Boolean);
+                const p='{{ position }}';
+                if(!r.includes(p)) r.push(p);
+                u.searchParams.set('reveal', r.join(','));
+                u.hash='q'+p;
+                window.location.replace(u.toString());
+              }"
+              {% endif %}>
           <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
           <ul class="options-list">
             {% for o in qv.options %}

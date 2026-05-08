@@ -37,6 +37,7 @@ from app.security.error_handler import install_error_handlers
 from app.security.headers import SecurityHeadersMiddleware
 from app.security.proxy import install_proxy_headers
 from app.security.sanitize import render_markdown
+from app.utils.display import pretty_vendor_name
 
 
 def _init_sentry(settings: Settings) -> None:
@@ -88,6 +89,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
     # Phase 09 — register `render_md` filter for safe Markdown rendering.
     templates.env.filters["render_md"] = render_markdown
+    # Vendor name display normalizer — fixes "fortinet" → "Fortinet" without
+    # touching DB. Acronyms like "AWS" pass through untouched.
+    templates.env.filters["pretty_vendor"] = pretty_vendor_name
     app.state.templates = templates
 
     # Routers — public first, then auth, then admin (order is cosmetic).

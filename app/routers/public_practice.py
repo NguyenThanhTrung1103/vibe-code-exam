@@ -18,7 +18,7 @@ Audit logs for guest actions write `ActorType.system` with `actor_id=None`
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, Form, HTTPException, Request, status
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import func, select
@@ -29,16 +29,21 @@ from app.auth.guest_token import (
     issue_guest_token,
     verify_guest_token,
 )
+from app.auth.permissions import OptionalUser
 from app.config import get_settings
 from app.deps import SessionDep
 from app.middleware import REQUEST_ID_HEADER
 from app.models.catalog import Course, Exam, Provider
-from app.models.enums import QuestionStatus
+from app.models.enums import AttemptMode, QuestionStatus
 from app.models.questions import Question
 from app.paths import TEMPLATES_DIR
 from app.routers.public.catalog_query import published_exam_filter
 from app.security.rate_limits import RL_ATTEMPT_START
 from app.services import attempt_service
+
+# Mock Exam default subset size — overridable per-request via the form's
+# `question_count` field; capped server-side at the exam's published total.
+_MOCK_DEFAULT_COUNT = 20
 
 router = APIRouter(prefix="/practice", tags=["public", "practice"])
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
@@ -112,19 +117,68 @@ def start_guest_attempt(
     exam_id: int,
     request: Request,
     session: SessionDep,
+    current_user: OptionalUser,
+    mode: str = Form("practice"),
+    question_count: int | None = Form(None),
 ) -> Response:
-    """Start (or resume) a guest practice attempt against a published exam.
+    """Start (or resume) an attempt against a published exam.
 
-    Cookie lifecycle:
+    Two flows depending on caller:
+      * Authenticated user → `attempt_service.start_attempt(actor=user)` so
+        the attempt is linked to the user account (visible in their history).
+      * Guest → `attempt_service.start_guest_attempt(guest_token=...)` with
+        signed-cookie identity.
+
+    `mode` accepts `practice` (Learning Mode — answers + explanations
+    revealed inline) or `exam` (Mock Exam Mode — answers hidden until
+    submit). `question_count` is the optional cap for Mock Exam (default
+    20, capped at exam total). Ignored for Learning Mode (uses all
+    questions so the learner studies the full bank).
+
+    Cookie lifecycle (guest path only):
       * Read existing `guest_token` cookie; verify signature.
-      * If valid → reuse the embedded UUID (resumes any in-progress attempt
-        the guest already has on this exam).
-      * If missing / expired / tampered → mint a fresh UUID, set a fresh
-        signed cookie on the redirect response. Existing attempts under
-        the OLD UUID are intentionally orphaned (they remain accessible
-        only until the cookie's max_age elapsed, which is exactly when
-        the new UUID is issued — by design).
+      * Valid → reuse UUID (resumes in-progress attempt for same exam).
+      * Missing / expired / tampered → mint a fresh UUID, set a fresh
+        signed cookie on the redirect response.
     """
+    if mode not in ("practice", "exam"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="mode must be 'practice' or 'exam'",
+        )
+    parsed_mode = AttemptMode(mode)
+
+    # Mock Exam — sanitize subset size; ignore for Learning so the learner
+    # sees every published question.
+    effective_count: int | None = None
+    if parsed_mode == AttemptMode.exam:
+        raw = question_count if (question_count and question_count > 0) else _MOCK_DEFAULT_COUNT
+        effective_count = max(1, int(raw))
+
+    request_id = request.headers.get(REQUEST_ID_HEADER)
+
+    if current_user is not None:
+        try:
+            attempt = attempt_service.start_attempt(
+                session,
+                actor=current_user,
+                request_id=request_id,
+                exam_id=exam_id,
+                mode=parsed_mode,
+                question_count=effective_count,
+            )
+        except attempt_service.AttemptValidationError as exc:
+            msg = str(exc)
+            if "not available" in msg or "not found" in msg:
+                raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=msg) from exc
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=msg) from exc
+        session.commit()
+        return RedirectResponse(
+            url=f"/attempts/{attempt.id}/page/1",
+            status_code=status.HTTP_303_SEE_OTHER,
+        )
+
+    # Guest path
     incoming = request.cookies.get(GUEST_COOKIE_NAME)
     raw_uuid = verify_guest_token(incoming)
     cookie_to_set: str | None = None
@@ -136,12 +190,13 @@ def start_guest_attempt(
     try:
         attempt = attempt_service.start_guest_attempt(
             session,
-            request_id=request.headers.get(REQUEST_ID_HEADER),
+            request_id=request_id,
             exam_id=exam_id,
             guest_token=raw_uuid,
+            mode=parsed_mode,
+            question_count=effective_count,
         )
     except attempt_service.AttemptValidationError as exc:
-        # Map to 403 when exam is not publishable; 404 / 400 otherwise.
         msg = str(exc)
         if "not available" in msg or "not found" in msg:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=msg) from exc
