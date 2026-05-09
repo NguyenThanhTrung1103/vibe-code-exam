@@ -189,6 +189,35 @@ For production behind a reverse proxy (nginx, Caddy, Traefik, Cloudflare):
 * Bind the app port to `127.0.0.1:8000` on the host (edit `docker-compose.yml`
   → `ports: ["127.0.0.1:8000:8000"]`) so only the proxy can reach it.
 
+### Production hardening checklist
+
+By default the compose file is **safe by construction** for the data plane:
+`db`, `redis`, and `mailhog` ports are bound to `127.0.0.1` (loopback only)
+via `EXPOSE_HOST=127.0.0.1` in `.env.example`. The LAN cannot reach
+Postgres or Redis. Other compose services reach them through the internal
+network using the `db` / `redis` hostnames regardless of host binding.
+
+Before flipping to production:
+
+* [ ] `ENV=prod`, `DEBUG=false` in `.env`
+* [ ] `SECRET_KEY` rotated to a fresh `secrets.token_urlsafe(48)` value
+* [ ] `POSTGRES_PASSWORD` changed from the default
+* [ ] `EXPOSE_HOST=127.0.0.1` confirmed (the default — do **not** set it to
+      `0.0.0.0` unless you intentionally need external DB access and have a
+      firewall in front)
+* [ ] `app` service either bound to `127.0.0.1:8000:8000` (reverse proxy on
+      same host) or to a dedicated interface; never expose `0.0.0.0:8000`
+      directly to the internet without a TLS-terminating proxy
+* [ ] `mailhog` removed or kept loopback-only; not pointed at by SMTP-using
+      code in prod (use a real SMTP relay)
+* [ ] Reverse proxy forwards `X-Forwarded-Proto: https` so cookies set as
+      Secure resolve correctly
+* [ ] Postgres backups scheduled (see §9)
+* [ ] Sentry DSN set so production errors get reported
+* [ ] Log volume / rotation configured at the host or Docker daemon level
+      (`docker compose logs` is fine for ad-hoc; for retention use a
+      driver like `json-file` with `max-size`, or ship logs to Loki/ELK)
+
 ## 11. CI/CD-ready notes
 
 The image is the only artefact you need. A typical pipeline:

@@ -15,6 +15,10 @@
 # the same compose file works for local dev, the LXC, and any other server.
 
 services:
+  # Datastores: host port published only on loopback so they are NOT
+  # reachable from the LAN. Other compose services reach them via the
+  # internal network using the `db` / `redis` hostnames regardless. To
+  # expose to the LAN intentionally, override `EXPOSE_HOST` (e.g. `0.0.0.0`).
   db:
     image: postgres:14-alpine
     restart: unless-stopped
@@ -23,7 +27,7 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-exam_platform_pw}
       POSTGRES_DB: ${POSTGRES_DB:-exam_platform_db}
     ports:
-      - "${DB_PORT:-5432}:5432"
+      - "${EXPOSE_HOST:-127.0.0.1}:${DB_PORT:-5432}:5432"
     volumes:
       - exam-pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -38,7 +42,7 @@ services:
     restart: unless-stopped
     command: ["redis-server", "--appendonly", "yes"]
     ports:
-      - "${REDIS_PORT:-6379}:6379"
+      - "${EXPOSE_HOST:-127.0.0.1}:${REDIS_PORT:-6379}:6379"
     volumes:
       - exam-redisdata:/data
     healthcheck:
@@ -47,12 +51,15 @@ services:
       timeout: 3s
       retries: 10
 
+  # MailHog is dev-only — keep loopback-bound by default. Disable the whole
+  # service in prod by passing `--profile dev` (or remove this block from
+  # docker-compose.override.yml in prod).
   mailhog:
     image: mailhog/mailhog:latest
     restart: unless-stopped
     ports:
-      - "${MAILHOG_SMTP_PORT:-1025}:1025"  # SMTP
-      - "${MAILHOG_UI_PORT:-8025}:8025"    # Web UI
+      - "${EXPOSE_HOST:-127.0.0.1}:${MAILHOG_SMTP_PORT:-1025}:1025"  # SMTP
+      - "${EXPOSE_HOST:-127.0.0.1}:${MAILHOG_UI_PORT:-8025}:8025"    # Web UI
 
   app:
     build:
