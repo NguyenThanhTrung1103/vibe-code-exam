@@ -54,10 +54,7 @@ pipeline {
         // already authorised on 192.168.99.35 (same key as for exam-lxc).
         stage('Server setup (first run only)') {
             when {
-                allOf {
-                    branch 'Exam'
-                    expression { return params.DEPLOY }
-                }
+                expression { return params.DEPLOY }
             }
             steps {
                 sh '''
@@ -98,10 +95,7 @@ EOSSH
 
         stage('Build & Push Docker image') {
             when {
-                allOf {
-                    branch 'Exam'
-                    expression { return params.DEPLOY }
-                }
+                expression { return params.DEPLOY }
             }
             steps {
                 sh '''
@@ -128,10 +122,7 @@ EOSSH
 
         stage('Deploy to production') {
             when {
-                allOf {
-                    branch 'Exam'
-                    expression { return params.DEPLOY }
-                }
+                expression { return params.DEPLOY }
             }
             steps {
                 sh '''
@@ -153,10 +144,7 @@ EOSSH
 
         stage('Post-deploy smoke test') {
             when {
-                allOf {
-                    branch 'Exam'
-                    expression { return params.DEPLOY }
-                }
+                expression { return params.DEPLOY }
             }
             steps {
                 sh '''
@@ -184,7 +172,7 @@ EOSSH
     post {
         success {
             script {
-                def tag = env.IMAGE_TAG ?: '(no image built — DEPLOY off or non-master branch)'
+                def tag = env.IMAGE_TAG ?: '(no image built — DEPLOY off)'
                 echo "✔ pipeline succeeded — image tag: ${tag}"
             }
         }
