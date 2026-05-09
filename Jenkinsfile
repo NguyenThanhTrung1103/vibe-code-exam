@@ -55,7 +55,7 @@ pipeline {
         stage('Server setup (first run only)') {
             when {
                 allOf {
-                    branch 'master'
+                    branch 'Exam'
                     expression { return params.DEPLOY }
                 }
             }
@@ -99,7 +99,7 @@ EOSSH
         stage('Build & Push Docker image') {
             when {
                 allOf {
-                    branch 'master'
+                    branch 'Exam'
                     expression { return params.DEPLOY }
                 }
             }
@@ -129,7 +129,7 @@ EOSSH
         stage('Deploy to production') {
             when {
                 allOf {
-                    branch 'master'
+                    branch 'Exam'
                     expression { return params.DEPLOY }
                 }
             }
