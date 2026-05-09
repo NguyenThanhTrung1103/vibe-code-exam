@@ -72,18 +72,77 @@ docker compose ps
 
 ## 4. Run database migrations
 
-The app does **not** run migrations on startup (intentional — keeps boot
-fast and predictable). Run them from the app container:
+**Migration model — read this before deploying:**
+
+* The app **never** creates or alters tables at runtime. `app/db.py` only
+  builds an engine; it does **not** call `Base.metadata.create_all(...)`.
+  The schema is owned exclusively by Alembic (`migrations/versions/`).
+* Migrations are an **explicit deployment step**, not part of container
+  boot, so a failing migration cannot loop-restart the app.
+* The first ten migrations (`0001` → `0010`) are required: they create
+  the schema, register Postgres ENUM types, install the `pg_trgm`
+  extension (used by the import near-duplicate index), and seed a
+  baseline catalog (1 provider "Fortinet", 1 product "FortiOS 7.4",
+  1 course/exam "NSE4" stub, 5 source domains). Migration `0002` is
+  idempotent (`ON CONFLICT DO NOTHING` / `WHERE NOT EXISTS`), so re-runs
+  on an existing DB are safe and never duplicate seed rows.
+* `alembic.ini` does **not** hardcode a database URL — `migrations/env.py`
+  reads it from `app.config.Settings`, which itself reads `DATABASE_URL`
+  from `.env`. There is no risk of pointing alembic at a different DB
+  than the app.
+
+### Fresh database
 
 ```bash
-docker compose exec app alembic upgrade head
+docker compose up -d                              # Postgres + Redis + app boot
+docker compose exec app alembic upgrade head     # creates schema + seeds
+docker compose exec -e EXAM_ADMIN_PW="$ADMIN_PW" app \
+  python -m scripts.create_admin --email admin@example.com --username admin
+curl -fsS http://localhost:8000/readyz             # 200 once schema == head
 ```
 
-To create a new migration after model changes:
+`docker compose up` does **not** create the application schema — Postgres
+just runs its own initdb to create the empty `${POSTGRES_DB}` database
+(default name `exam_platform_db`). All tables, ENUM types, indexes, and
+seed rows come from `alembic upgrade head`.
+
+### Existing database (upgrading an already-deployed instance)
+
+Before applying new migrations on a populated database:
+
+1. **Take a backup** (see §9):
+   ```bash
+   docker compose exec -T db \
+     pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" \
+     | gzip > exam-db-pre-upgrade-$(date +%Y%m%d-%H%M).sql.gz
+   ```
+2. **Inspect the diff** between current head and target head:
+   ```bash
+   docker compose exec app alembic current    # what's applied
+   docker compose exec app alembic heads      # what's available
+   docker compose exec app alembic history    # human-readable list
+   ```
+3. **Apply** the upgrade:
+   ```bash
+   docker compose exec app alembic upgrade head
+   ```
+4. **Verify** the app reports `migrations.status: ok` on `/readyz`:
+   ```bash
+   curl -sS http://localhost:8000/readyz | python -c \
+     "import json,sys; print(json.load(sys.stdin)['migrations'])"
+   ```
+5. If something goes wrong, restore from the backup (§9 Restore) and
+   investigate before retrying.
+
+### Authoring new migrations
 
 ```bash
 docker compose exec app alembic revision --autogenerate -m "describe change"
 ```
+
+Always review the generated SQL — autogenerate misses constraint renames,
+ENUM membership changes, and server defaults. Re-run on a throwaway DB
+before committing.
 
 ## 5. Create the first admin
 
@@ -259,10 +318,31 @@ deploy:
   script:
     - ssh "$DEPLOY_HOST" "cd /srv/exam-platform && \
         docker compose pull app && \
+        docker compose up -d --wait db redis && \
         docker compose up -d app && \
-        docker compose exec -T app alembic upgrade head"
+        docker compose exec -T app alembic upgrade head && \
+        curl -fsS http://127.0.0.1:8000/readyz"
   only: [main]
 ```
+
+**Why this exact ordering matters:**
+
+1. `pull` first so the new image is local before any container shuffle.
+2. `up -d --wait db redis` brings backends to `healthy` *before* the app
+   starts, so the app's first `/healthz` probe succeeds.
+3. `up -d app` (re)creates the app container with the new image. At this
+   point the app responds 200 on `/healthz` (db+redis ok) but `/readyz`
+   may report `migrations.status: behind` if the new image ships
+   migrations the DB hasn't applied yet.
+4. `alembic upgrade head` advances the schema. Idempotent — running
+   against an already-current DB is a no-op.
+5. `curl /readyz` confirms `db=ok`, `redis=ok`, `migrations.status=ok`
+   before the deploy job exits green.
+
+For first-time deploy on a fresh server, add one more step **before** the
+ssh block: `docker compose exec -e EXAM_ADMIN_PW=... app python -m
+scripts.create_admin --email ... --username ...`. Skip on subsequent
+deploys (the script refuses to overwrite an existing user, exit code 3).
 
 GitHub Actions equivalent: same shape — `services:` for postgres/redis, build with
 `docker/build-push-action@v6`, deploy via SSH. Worth adding once the team is
