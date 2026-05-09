@@ -3,13 +3,10 @@ pipeline {
     stages {
         stage('Test with pytest') {
             steps {
-                sh """
-                echo '' >> .dockerignore
-                sed -i '/^tests$/d' .dockerignore
-                docker build --no-cache -t exam-test -f Dockerfile.test .
-                docker run --rm exam-test
-                git checkout .dockerignore
-                """
+                sh 'sed -i "/^tests$/d" .dockerignore'
+                sh 'docker build --no-cache -t exam-test -f Dockerfile.test .'
+                sh 'docker run --rm exam-test'
+                sh 'git checkout .dockerignore'
             }
         }
     }
