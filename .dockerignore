@@ -38,7 +38,6 @@ htmlcov
 
 # Project-local working dirs (not needed inside the image)
 plans
-docs
 seed
 content/local
 agent_prompt_*

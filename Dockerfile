@@ -70,6 +70,7 @@ COPY --chown=exam:exam pyproject.toml uv.lock alembic.ini README.md ./
 COPY --chown=exam:exam migrations ./migrations
 COPY --chown=exam:exam scripts ./scripts
 COPY --chown=exam:exam app ./app
+COPY --chown=exam:exam docs ./docs
 
 # Uploads directory referenced by Settings.uploads_dir; must be writable.
 RUN install -d -o exam -g exam ${APP_HOME}/uploads
