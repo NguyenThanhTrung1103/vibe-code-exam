@@ -356,13 +356,13 @@ def test_mock_exam_subsets_to_question_count(client, nonce):
 
 
 def test_mock_exam_default_count_caps_at_total(client, nonce):
-    """If exam has fewer than the default mock size (35), the attempt uses all
+    """If exam has fewer than the default mock size (30), the attempt uses all
     available questions — no padding, no error."""
     admin = _make_admin(nonce)
     exam_id = _seed_published_exam(admin, nonce, n_questions=4)
     r = client.post(
         f"/practice/{exam_id}/start",
-        data={"mode": "exam"},  # no question_count → default 35, capped at 4
+        data={"mode": "exam"},  # no question_count → default 30, capped at 4
         follow_redirects=False,
     )
     assert r.status_code == 303
@@ -371,6 +371,31 @@ def test_mock_exam_default_count_caps_at_total(client, nonce):
         a = s.get(Attempt, attempt_id)
         assert a is not None
         assert a.total_questions == 4
+
+
+def test_mock_exam_default_count_uses_30_when_bank_has_more(client, nonce):
+    """When the question bank is bigger than the default Mock Exam size, the
+    Mock Exam attempt is created with exactly 30 randomly-sampled questions."""
+    admin = _make_admin(nonce)
+    exam_id = _seed_published_exam(admin, nonce, n_questions=42)
+    r = client.post(
+        f"/practice/{exam_id}/start",
+        data={"mode": "exam"},  # no question_count → default 30
+        follow_redirects=False,
+    )
+    assert r.status_code == 303
+    attempt_id = int(r.headers["location"].split("/")[2])
+    with SessionLocal() as s:
+        a = s.get(Attempt, attempt_id)
+        assert a is not None
+        assert a.total_questions == 30
+        rows = s.scalars(
+            select(AttemptAnswer).where(AttemptAnswer.attempt_id == attempt_id)
+        ).all()
+        assert len(rows) == 30
+        # Random subset must be unique — same question can't repeat in one mock.
+        qids = [r.question_id for r in rows]
+        assert len(set(qids)) == 30
 
 
 def test_learning_mode_uses_all_questions(client, nonce):
@@ -390,3 +415,47 @@ def test_learning_mode_uses_all_questions(client, nonce):
         assert a is not None
         assert a.mode.value == "practice"
         assert a.total_questions == 5
+
+
+def test_mock_exam_page_does_not_leak_correct_answer(client, nonce):
+    """Mock Exam page must not render any correct-answer marker, explanation,
+    reveal-toggle, or solution panel — even if the URL forges a `?reveal=`
+    query string. Learning Mode (control) does render markers when revealed."""
+    admin = _make_admin(nonce)
+    exam_id = _seed_published_exam(admin, nonce, n_questions=2)
+
+    # Mock Exam attempt
+    r_exam = client.post(
+        f"/practice/{exam_id}/start",
+        data={"mode": "exam"},
+        follow_redirects=False,
+    )
+    assert r_exam.status_code == 303
+    attempt_id_exam = int(r_exam.headers["location"].split("/")[2])
+
+    # Try to reveal — query param must be ignored in exam mode.
+    page = client.get(f"/attempts/{attempt_id_exam}/page/1?reveal=1,2")
+    assert page.status_code == 200
+    assert "Reveal Solution" not in page.text
+    assert "Hide Solution" not in page.text
+    assert "Correct answer:" not in page.text
+    assert "✓ correct" not in page.text
+
+    # Reset cookie to start a fresh Learning attempt as a different guest.
+    client.cookies.clear()
+    r_learn = client.post(
+        f"/practice/{exam_id}/start",
+        data={"mode": "practice"},
+        follow_redirects=False,
+    )
+    assert r_learn.status_code == 303
+    attempt_id_learn = int(r_learn.headers["location"].split("/")[2])
+
+    # Learning Mode shows the reveal control + (when revealed) the solution.
+    page_learn_no_reveal = client.get(f"/attempts/{attempt_id_learn}/page/1")
+    assert page_learn_no_reveal.status_code == 200
+    assert "Reveal Solution" in page_learn_no_reveal.text
+
+    page_learn_revealed = client.get(f"/attempts/{attempt_id_learn}/page/1?reveal=1")
+    assert page_learn_revealed.status_code == 200
+    assert "Correct answer:" in page_learn_revealed.text

@@ -638,3 +638,68 @@ def test_admin_provider_create_duplicate_slug_returns_friendly_error(
     assert r2.status_code == 400
     assert "already in use" in r2.text
     assert "IntegrityError" not in r2.text
+
+
+def test_admin_vendor_name_edit_propagates_to_public(
+    client: TestClient, nonce: str
+) -> None:
+    """Renaming a vendor in admin must update what the public vendor page
+    renders — i.e. the display name comes from the DB, not from a hardcoded
+    label or stale slug."""
+    actor = _admin_login(client, nonce)
+
+    # Seed a published exam under an initial vendor name so /vendors/{slug}
+    # has a public surface.
+    with SessionLocal() as s:
+        merged = s.merge(actor)
+        provider = catalog_service.create_provider(
+            s, actor=merged, request_id=None, name="Old Name", slug=f"p04t-{nonce}"
+        )
+        course = catalog_service.create_course(
+            s,
+            actor=merged,
+            request_id=None,
+            provider_id=provider.id,
+            name="C",
+            slug=f"c-{nonce}",
+        )
+        exam = catalog_service.create_exam(
+            s,
+            actor=merged,
+            request_id=None,
+            course_id=course.id,
+            name=f"E{nonce}",
+            slug=f"e-{nonce}",
+        )
+        catalog_service.publish_exam(
+            s, actor=merged, request_id=None, exam_id=exam.id
+        )
+        s.commit()
+        provider_id = provider.id
+        provider_slug = provider.slug
+
+    # Public page shows the original name.
+    r = client.get(f"/vendors/{provider_slug}")
+    assert r.status_code == 200
+    assert "Old Name" in r.text
+
+    # Admin renames the vendor (display name only — slug intentionally kept).
+    csrf, _ = _csrf_pair(client, "/admin/providers")
+    r_edit = client.post(
+        f"/admin/providers/{provider_id}/edit",
+        data={
+            "name": "Brand New Name",
+            "slug": provider_slug,
+            "description": "Updated blurb",
+            "csrf_token": csrf,
+        },
+    )
+    assert r_edit.status_code == 200, r_edit.text
+    assert "Brand New Name" in r_edit.text
+
+    # Public page now reflects the renamed vendor — proves the public side
+    # reads the DB and is not hardcoded.
+    r2 = client.get(f"/vendors/{provider_slug}")
+    assert r2.status_code == 200
+    assert "Brand New Name" in r2.text
+    assert "Old Name" not in r2.text

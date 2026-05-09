@@ -76,50 +76,54 @@
         <p class="text-on-surface-variant">This exam is published but has no questions yet. Check back later.</p>
       </div>
     {% else %}
-      {% set mock_default = 20 if published_question_count >= 20 else published_question_count %}
-      <div class="grid grid-cols-1 md:grid-cols-2 gap-md">
+      {% set mock_default = 30 if published_question_count >= 30 else published_question_count %}
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-md items-stretch">
         <form method="post" action="/practice/{{ exam.id }}/start"
-              class="bg-surface-container-lowest p-lg rounded-xl border border-outline-variant flex flex-col">
+              class="bg-surface-container-lowest p-lg rounded-xl border border-outline-variant flex flex-col h-full">
           <div class="flex items-center gap-sm mb-xs">
             <span class="material-symbols-outlined text-primary">school</span>
             <h3 class="font-h3 text-h3 text-on-surface">Learning Mode</h3>
           </div>
           <p class="font-body-md text-on-surface-variant mb-md">
-            Study mode. After you select an answer, the correct answer and explanation appear immediately.
+            Practice with instant feedback. After you select an answer, the correct answer and explanation appear right away.
             Uses all {{ published_question_count }} questions.
           </p>
           <input type="hidden" name="mode" value="practice" />
           <button type="submit"
-                  class="mt-auto inline-flex items-center justify-center gap-xs bg-primary hover:bg-primary-container text-on-primary font-label-md px-lg py-md rounded-lg transition-all active:scale-[0.98] shadow-md">
+                  class="mt-auto h-12 inline-flex items-center justify-center gap-xs bg-primary hover:bg-primary-container text-on-primary font-label-md px-lg rounded-lg transition-all active:scale-[0.98] shadow-md">
             <span class="material-symbols-outlined text-[18px]">play_arrow</span>
-            Start learning
+            Start Learning Mode
           </button>
         </form>
 
         <form method="post" action="/practice/{{ exam.id }}/start"
-              class="bg-surface-container-lowest p-lg rounded-xl border border-outline-variant flex flex-col">
+              class="bg-surface-container-lowest p-lg rounded-xl border border-outline-variant flex flex-col h-full">
           <div class="flex items-center gap-sm mb-xs">
             <span class="material-symbols-outlined text-tertiary">timer</span>
             <h3 class="font-h3 text-h3 text-on-surface">Mock Exam</h3>
           </div>
           <p class="font-body-md text-on-surface-variant mb-md">
-            Timed-style mock with a random subset of questions. Answers and explanations are hidden until you submit.
+            {{ mock_default }} random questions, results revealed only at the end. Answers and explanations stay hidden until you submit.
           </p>
-          <label class="block text-caption text-on-surface-variant mb-xs" for="question_count_{{ exam.id }}">
-            Number of questions (max {{ published_question_count }})
-          </label>
-          <input id="question_count_{{ exam.id }}" type="number" name="question_count"
-                 min="1" max="{{ published_question_count }}" value="{{ mock_default }}"
-                 class="block w-full px-md py-sm border border-outline-variant rounded font-body-md mb-md bg-surface-container-lowest" />
           <input type="hidden" name="mode" value="exam" />
-          <button type="submit"
-                  class="mt-auto inline-flex items-center justify-center gap-xs bg-tertiary hover:bg-tertiary-container text-on-tertiary font-label-md px-lg py-md rounded-lg transition-all active:scale-[0.98] shadow-md">
-            <span class="material-symbols-outlined text-[18px]">timer</span>
-            Start mock exam
-          </button>
+          <div class="mt-auto flex flex-col sm:flex-row gap-sm sm:items-stretch">
+            <label class="flex items-stretch rounded-lg border border-outline-variant overflow-hidden bg-surface-container-lowest"
+                   for="question_count_{{ exam.id }}">
+              <span class="px-md flex items-center bg-surface-container-low text-on-surface-variant text-caption font-label-md uppercase tracking-wide">Q</span>
+              <input id="question_count_{{ exam.id }}" type="number" name="question_count"
+                     min="1" max="{{ published_question_count }}" value="{{ mock_default }}"
+                     aria-label="Number of questions (max {{ published_question_count }})"
+                     class="w-20 h-12 text-center font-body-md text-on-surface bg-transparent border-0 focus:ring-0 focus:outline-none" />
+            </label>
+            <button type="submit"
+                    class="flex-1 h-12 inline-flex items-center justify-center gap-xs bg-tertiary hover:bg-tertiary-container text-on-tertiary font-label-md px-lg rounded-lg transition-all active:scale-[0.98] shadow-md">
+              <span class="material-symbols-outlined text-[18px]">timer</span>
+              Start Mock Exam
+            </button>
+          </div>
         </form>
       </div>
-      <p class="text-caption text-on-surface-variant mt-md">No login required.</p>
+      <p class="text-caption text-on-surface-variant mt-md">No login required. Mock Exam picks {{ mock_default }} random questions; Learning Mode walks the full bank.</p>
     {% endif %}
   </section>
 </section>

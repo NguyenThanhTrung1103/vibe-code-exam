@@ -43,7 +43,7 @@ from app.services import attempt_service
 
 # Mock Exam default subset size — overridable per-request via the form's
 # `question_count` field; capped server-side at the exam's published total.
-_MOCK_DEFAULT_COUNT = 20
+_MOCK_DEFAULT_COUNT = 30
 
 router = APIRouter(prefix="/practice", tags=["public", "practice"])
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
@@ -132,7 +132,7 @@ def start_guest_attempt(
     `mode` accepts `practice` (Learning Mode — answers + explanations
     revealed inline) or `exam` (Mock Exam Mode — answers hidden until
     submit). `question_count` is the optional cap for Mock Exam (default
-    20, capped at exam total). Ignored for Learning Mode (uses all
+    30, capped at exam total). Ignored for Learning Mode (uses all
     questions so the learner studies the full bank).
 
     Cookie lifecycle (guest path only):
