@@ -174,7 +174,7 @@ def test_ipv4_blocklist_blocks_private_and_cgnat(ip: str, expected_net: str) -> 
         ("https://[fc00::1]/", "blocked_ipv6: fc00::/7"),
         ("https://[ff00::1]/", "blocked_ipv6: ff00::/8"),
         # IPv4-mapped IPv6 "::ffff:192.168.1.1" — red-team #2 escape vector
-        ("https://[::ffff:192.168.1.1]/", "blocked_ipv6: ::ffff:0:0/96"),
+        ("https://[::ffff:192.168.1.1]/", "blocked_ipv6: ::ffff:0.0.0.0/96"),
     ],
 )
 def test_ipv6_blocklist_blocks_loopback_link_local_unique_local(
