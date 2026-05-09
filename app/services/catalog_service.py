@@ -30,6 +30,7 @@ from app.audit.writer import write_audit_log
 from app.models.catalog import Course, Exam, ProductVersion, Provider, Topic
 from app.models.enums import ActorType, ExamPublishStatus
 from app.models.users import User
+from app.utils.slug import make_slug
 
 
 class DuplicateSlugError(ValueError):
@@ -358,6 +359,41 @@ def soft_delete_course(
         entity_id=course_id,
         old_value={"name": c.name, "slug": c.slug},
         **_common_audit_kwargs(actor, request_id),
+    )
+
+
+def get_or_create_course_by_name(
+    session: Session,
+    *,
+    actor: User,
+    request_id: str | None,
+    course_name: str,
+) -> Course:
+    """Resolve a Course by slug derived from `course_name`; auto-create the
+    Provider + Course if neither exists. Used by the simplified admin
+    "add exam" flow where the operator types just one course string and
+    the provider hierarchy is filled in behind the scenes.
+    """
+    course_slug = make_slug(course_name)
+    course = session.scalars(select(Course).where(Course.slug == course_slug)).first()
+    if course is not None:
+        return course
+    provider = session.scalars(select(Provider).where(Provider.slug == course_slug)).first()
+    if provider is None:
+        provider = create_provider(
+            session,
+            actor=actor,
+            request_id=request_id,
+            name=course_name,
+            slug=course_slug,
+        )
+    return create_course(
+        session,
+        actor=actor,
+        request_id=request_id,
+        provider_id=provider.id,
+        name=course_name,
+        slug=course_slug,
     )
 
 

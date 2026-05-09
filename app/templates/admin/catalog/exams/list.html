@@ -12,15 +12,14 @@
         hx-swap="beforeend"
         hx-on::after-request="if(event.detail.successful) this.reset()">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-    <label>Course
-      <select name="course_id" required>
-        {% for c in courses %}<option value="{{ c.id }}">{{ c.name }}</option>{% endfor %}
-      </select>
+    <label>Exam name
+      <input name="name" required maxlength="255"
+             placeholder="e.g. AWS Certified Solutions Architect">
     </label>
-    <label>Name <input name="name" required maxlength="255"></label>
-    <label>Slug <input name="slug" maxlength="128" placeholder="auto from name"></label>
-    <label>Code <input name="code" maxlength="64"></label>
-    <label>Description <textarea name="description" maxlength="4000"></textarea></label>
+    <label>Course / Certification
+      <input name="course_name" required maxlength="255"
+             placeholder="e.g. AWS SAA-C03">
+    </label>
     <button class="btn" type="submit">Create</button>
   </form>
 </section>

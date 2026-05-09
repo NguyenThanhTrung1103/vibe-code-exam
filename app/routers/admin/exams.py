@@ -29,11 +29,10 @@ def list_exams(request: Request, user: RequireAdmin, session: SessionDep) -> HTM
         .where(Exam.deleted_at.is_(None))
         .order_by(Exam.name)
     ).all()
-    courses = session.scalars(select(Course).order_by(Course.name)).all()
     return render_with_csrf(
         request,
         "admin/catalog/exams/list.html",
-        {"rows": rows, "courses": courses, "current_user": user},
+        {"rows": rows, "current_user": user},
     )
 
 
@@ -42,23 +41,34 @@ def create_exam(
     request: Request,
     user: RequireAdmin,
     session: SessionDep,
-    course_id: int = Form(...),
     name: str = Form(...),
-    slug: str = Form(""),
-    code: str = Form(""),
-    description: str = Form(""),
+    course_name: str = Form(...),
     csrf_token: str = Form(""),
 ) -> HTMLResponse:
+    """Simplified flat creation flow (homelab):
+    admin types exam name + course/certification name; provider+course
+    are auto-created if absent, and the exam slug is derived from name.
+    """
     require_csrf(request, csrf_token)
+    name = name.strip()
+    course_name = course_name.strip()
+    if not name or not course_name:
+        return flash_error(request, "exam name and course name are required")
+
+    request_id = request.headers.get(REQUEST_ID_HEADER)
+    try:
+        course = catalog_service.get_or_create_course_by_name(
+            session,
+            actor=user,
+            request_id=request_id,
+            course_name=course_name,
+        )
+    except catalog_service.DuplicateSlugError as exc:
+        return flash_error(request, str(exc))
+
     try:
         payload = ExamCreate.model_validate(
-            {
-                "course_id": course_id,
-                "name": name,
-                "slug": slug or None,
-                "code": code or None,
-                "description": description or None,
-            }
+            {"course_id": course.id, "name": name, "slug": None}
         )
     except ValidationError as exc:
         return flash_error(request, str(exc.errors()[0]["msg"]))
@@ -67,12 +77,10 @@ def create_exam(
         exam = catalog_service.create_exam(
             session,
             actor=user,
-            request_id=request.headers.get(REQUEST_ID_HEADER),
+            request_id=request_id,
             course_id=payload.course_id,
             name=payload.name,
             slug=payload.slug,
-            code=payload.code,
-            description=payload.description,
         )
     except catalog_service.DuplicateSlugError as exc:
         return flash_error(request, str(exc))
