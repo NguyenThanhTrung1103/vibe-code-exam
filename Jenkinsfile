@@ -154,7 +154,7 @@ EOSSH
         stage('Post-deploy smoke test') {
             when {
                 allOf {
-                    branch 'master'
+                    branch 'Exam'
                     expression { return params.DEPLOY }
                 }
             }
