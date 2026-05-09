@@ -70,7 +70,16 @@ pipeline {
                         export DEBIAN_FRONTEND=noninteractive
                         apt-get update -qq
                         apt-get upgrade -y -qq
-                        apt-get install -y -qq docker.io docker-compose-plugin curl ca-certificates
+                        apt-get install -y -qq curl ca-certificates gnupg lsb-release
+
+                        # Add Docker official repo
+                        curl -fsSL https://download.docker.com/linux/ubuntu/gpg | \
+                            gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg
+                        echo "deb [arch=amd64 signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] \
+                            https://download.docker.com/linux/ubuntu \
+                            $(lsb_release -cs) stable" | tee /etc/apt/sources.list.d/docker.list
+                        apt-get update -qq
+                        apt-get install -y -qq docker-ce docker-ce-cli containerd.io docker-compose-plugin curl ca-certificates
                         systemctl enable docker
                         systemctl start docker
 
