@@ -1,6 +1,23 @@
+# Exam Platform — local + portable single-host stack.
+#
+# Usage:
+#   cp .env.example .env
+#   docker compose build
+#   docker compose up -d
+#   docker compose exec app alembic upgrade head
+#   docker compose exec app python -m scripts.create_admin --email admin@local.test --username admin
+#
+# Health: curl http://localhost:${APP_PORT:-8000}/healthz
+# Tear down (KEEP DATA): docker compose down
+# Tear down (DROP DATA): docker compose down -v
+#
+# Naming convention: short service names (db, redis, app, worker, mailhog) so
+# the same compose file works for local dev, the LXC, and any other server.
+
 services:
   db:
     image: postgres:14-alpine
+    restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-exam_platform_user}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-exam_platform_pw}
@@ -13,12 +30,17 @@ services:
       test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
       interval: 5s
       timeout: 3s
-      retries: 10
+      retries: 12
+      start_period: 10s
 
   redis:
     image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
     ports:
       - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - exam-redisdata:/data
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
@@ -27,30 +49,48 @@ services:
 
   mailhog:
     image: mailhog/mailhog:latest
+    restart: unless-stopped
     ports:
-      - "1025:1025"
-      - "8025:8025"
+      - "${MAILHOG_SMTP_PORT:-1025}:1025"  # SMTP
+      - "${MAILHOG_UI_PORT:-8025}:8025"    # Web UI
 
   app:
     build:
       context: .
       dockerfile: Dockerfile
+    image: exam-platform:local
+    restart: unless-stopped
     depends_on:
       db:
         condition: service_healthy
       redis:
         condition: service_healthy
+    env_file:
+      - .env
     environment:
-      ENV: ${ENV:-local}
-      DEBUG: ${DEBUG:-true}
-      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      # Inside the compose network the hostnames are `db` / `redis`. We
+      # build the URLs explicitly so .env can leave DATABASE_URL pointed
+      # at localhost for non-docker dev without breaking the container.
       DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-exam_platform_user}:${POSTGRES_PASSWORD:-exam_platform_pw}@db:5432/${POSTGRES_DB:-exam_platform_db}
       REDIS_URL: redis://redis:6379/0
-      SECRET_KEY: ${SECRET_KEY:-change-me-before-prod}
-      SESSION_COOKIE_NAME: ${SESSION_COOKIE_NAME:-exam_session}
-      SENTRY_DSN: ${SENTRY_DSN:-}
+      APP_HOST: 0.0.0.0
+      APP_PORT: 8000
     ports:
       - "${APP_PORT:-8000}:8000"
+    volumes:
+      - exam-uploads:/srv/exam-platform/uploads
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8000/healthz"]
+      interval: 15s
+      timeout: 5s
+      retries: 4
+      start_period: 20s
+
+  # RQ worker is intentionally omitted — `app/workers/` is reserved for
+  # Phase 2+ background jobs and has no module yet. Add a `worker` service
+  # here once the RQ entrypoint exists; same image, different command.
 
 volumes:
   exam-pgdata:
+  exam-redisdata:
+  exam-uploads:

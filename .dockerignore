@@ -1,15 +1,74 @@
+# Build context exclusions — keep the image small and reproducible.
+# Anything kept out here also speeds up `docker build` over the wire.
+
+# Version control
 .git
-.venv
+.gitattributes
+.gitignore
+.gitlab-ci.yml
+.github
+
+# Python build artefacts
 __pycache__
 *.pyc
+*.pyo
+*.pyd
+.python-version
+.venv
+venv
+.eggs
+*.egg-info
+build
+dist
+
+# Tooling caches
 .pytest_cache
 .mypy_cache
 .ruff_cache
-node_modules
+.cache
+.coverage
+htmlcov
+.tox
+
+# Editor / IDE
+.vscode
+.idea
+*.swp
+*.swo
+
+# Project-local working dirs (not needed inside the image)
 plans
 docs
+seed
+content/local
+agent_prompt_*
+DESIGN.md
+PRD.md
+AGENTS.md
+summary.md
+release-manifest.json
+
+# Tests don't ship to the runtime image (mirrors the LXC deploy.sh policy)
 tests
+
+# Logs / dumps
 *.log
+*.sql.gz
+*.dump
+
+# Local secrets — only `.env.example` is allowed in the build context.
 .env
 .env.*
 !.env.example
+
+# Node (only present if frontend tooling is later added)
+node_modules
+
+# Claude / scout tooling
+.claude
+.cursor
+.repomixignore
+.editorconfig
+
+# Docker meta
+docker-compose.override.yml
