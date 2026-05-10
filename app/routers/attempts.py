@@ -41,6 +41,51 @@ def result(
         breakdown, overall_percent=float(attempt.score_percent or 0)
     )
     exam = session.get(Exam, attempt.exam_id)
+
+    # Per-question review summary (truncated text + user/correct + ✓/✗) — built
+    # in one query rather than N. Loads answers + their questions, then
+    # batch-loads correct option labels.
+    answer_rows = list(
+        session.execute(
+            select(AttemptAnswer, Question)
+            .join(Question, Question.id == AttemptAnswer.question_id)
+            .where(AttemptAnswer.attempt_id == attempt_id)
+            .order_by(AttemptAnswer.order_index)
+        )
+    )
+    qids = [q.id for _, q in answer_rows]
+    correct_labels_by_qid: dict[int, list[str]] = {}
+    if qids:
+        for qid, label, is_correct in session.execute(
+            select(QuestionOption.question_id, QuestionOption.label, QuestionOption.is_correct)
+            .where(QuestionOption.question_id.in_(qids))
+            .order_by(QuestionOption.order_index)
+        ):
+            if is_correct and label:
+                correct_labels_by_qid.setdefault(qid, []).append(label)
+
+    review_rows = []
+    for ans, q in answer_rows:
+        truncated = (q.question_text or "").strip()
+        if len(truncated) > 120:
+            truncated = truncated[:117] + "…"
+        selected = (ans.selected_options or "").strip() or "—"
+        correct = ", ".join(correct_labels_by_qid.get(q.id, [])) or "—"
+        review_rows.append(
+            {
+                "order": ans.order_index,
+                "question_text": truncated,
+                "user_answer": selected,
+                "correct_answer": correct,
+                "is_correct": bool(ans.is_correct),
+            }
+        )
+
+    pass_threshold = (
+        float(exam.passing_score_percent)
+        if exam is not None and exam.passing_score_percent is not None
+        else scoring_service.DEFAULT_PASS_SCORE_PERCENT
+    )
     return templates.TemplateResponse(
         request,
         "attempts/result.html",
@@ -51,6 +96,8 @@ def result(
             "exam": exam,
             "breakdown": breakdown,
             "recommendations": recs,
+            "review_rows": review_rows,
+            "pass_threshold": pass_threshold,
         },
     )
 

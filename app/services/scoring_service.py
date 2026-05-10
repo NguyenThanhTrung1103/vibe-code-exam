@@ -39,13 +39,18 @@ from app.models.users import User
 # ---------------------------------------------------------------------------
 
 
+# Fallback when an Exam has no `passing_score_percent` set. Keeps Mock Exam
+# pass/fail badges meaningful for legacy exams that pre-date the field.
+DEFAULT_PASS_SCORE_PERCENT = 72.0
+
+
 @dataclass(slots=True, frozen=True)
 class AttemptScore:
     total: int
     correct: int
     wrong: int  # answered-but-wrong + unanswered both count as wrong
     score_percent: float  # 0..100, two decimals
-    passed: bool | None  # None when exam has no passing_score_percent set
+    passed: bool | None  # always populated — falls back to DEFAULT_PASS_SCORE_PERCENT
 
 
 @dataclass(slots=True, frozen=True)
@@ -144,11 +149,12 @@ def compute_attempt_score(
     total = len(answers)
     wrong = total - correct_count
     score_percent = round(100.0 * correct_count / total, 2) if total else 0.0
-    passed: bool | None = None
     exam = session.get(Exam, attempt.exam_id)
     if exam is not None and exam.passing_score_percent is not None:
         threshold = float(exam.passing_score_percent)
-        passed = score_percent >= threshold
+    else:
+        threshold = DEFAULT_PASS_SCORE_PERCENT
+    passed: bool | None = score_percent >= threshold if total else None
 
     attempt.total_questions = total
     attempt.correct_count = correct_count

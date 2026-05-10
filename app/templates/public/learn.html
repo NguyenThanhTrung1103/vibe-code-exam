@@ -1,0 +1,113 @@
+{% extends "public/_layout.html" %}
+{% block title %}Learn — {{ exam.name }}{% endblock %}
+{% block extra_head %}
+  <link rel="stylesheet" href="{{ url_for('static', path='css/practice.css') }}" />
+{% endblock %}
+{% block body_class %}practice-page{% endblock %}
+{% block content %}
+<section class="practice-wrap" style="max-width:960px;margin:0 auto;padding:24px 16px;">
+
+  <nav class="text-caption text-on-surface-variant" aria-label="Breadcrumb" style="margin-bottom:12px;">
+    <a href="/vendors" style="color:inherit;">Vendors</a> ›
+    <a href="/vendors/{{ provider.slug }}" style="color:inherit;">{{ provider.name | pretty_vendor }}</a> ›
+    <a href="/exams/{{ provider.slug }}/{{ exam.slug }}" style="color:inherit;">{{ exam.name }}</a> ›
+    <span>Learn</span>
+  </nav>
+
+  <div class="exam-header" role="banner">
+    <span>{{ exam.name }} — Learn Mode</span>
+    <span style="font-weight:400;font-size:14px;">{{ total_questions }} question{{ '' if total_questions == 1 else 's' }}</span>
+  </div>
+
+  <p class="muted" style="margin:8px 0 16px;">
+    Self-paced study. Click <strong>Show Answer</strong> on any question to reveal the
+    correct option and explanation. No timer, no scoring.
+  </p>
+
+  {% if not cards %}
+    <div class="empty-state" role="status">
+      <p>No published questions yet for this exam.</p>
+    </div>
+  {% else %}
+
+  <div class="progress-bar-wrap">
+    <div class="progress-bar-track">
+      <div class="progress-bar-fill"
+           style="width: {{ ((page_end / total_questions) * 100)|round|int if total_questions else 0 }}%"></div>
+    </div>
+    <span class="progress-label">
+      Questions {{ page_start }}–{{ page_end }} of {{ total_questions }}
+    </span>
+  </div>
+
+  {% for card in cards %}
+    {% set q = card.question %}
+    {% set position = card.position %}
+    {% set correct_count = card.options | selectattr('is_correct') | list | length %}
+    <article class="question-card" id="q{{ position }}">
+      <div class="question-header">
+        <span class="question-number">Question #{{ position }}</span>
+        <span class="question-topic">{{ q.question_type.value | capitalize }}</span>
+      </div>
+      <div class="question-body">
+        <p class="question-text">{{ q.question_text }}</p>
+        {% if q.question_type.value == 'multiple' %}
+          <p class="select-n-hint"><strong>Select {{ correct_count }} answers</strong></p>
+        {% endif %}
+        <ul class="options-list">
+          {% for o in card.options %}
+            <li class="option-item{% if card.revealed and o.is_correct %} correct{% endif %}"
+                data-label="{{ o.label }}">
+              <span class="option-label">{{ o.label }}.</span>
+              <span class="option-text">{{ o.option_text }}</span>
+              {% if card.revealed and o.is_correct %}
+                <small class="opt-marker">✓ correct</small>
+              {% endif %}
+              {% if card.revealed and o.explanation %}
+                <small class="opt-explanation">{{ o.explanation }}</small>
+              {% endif %}
+            </li>
+          {% endfor %}
+        </ul>
+      </div>
+
+      <div class="question-actions">
+        <a class="btn-reveal" href="{{ card.toggle_url }}">
+          {% if card.revealed %}Hide Answer{% else %}Show Answer{% endif %}
+        </a>
+      </div>
+
+      {% if card.revealed %}
+      <div class="solution-panel" role="region" aria-label="Solution">
+        <p><strong>Correct answer:</strong>
+          <span class="correct-answer-label">{{ card.options | selectattr('is_correct') | map(attribute='label') | list | join(', ') }}</span>
+        </p>
+        {% if card.explanation %}
+          <p class="explanation">{{ card.explanation }}</p>
+        {% else %}
+          {% set correct_explanation = (card.options | selectattr('is_correct') | selectattr('explanation') | list | first) %}
+          {% if correct_explanation and correct_explanation.explanation %}
+            <p class="explanation">{{ correct_explanation.explanation }}</p>
+          {% else %}
+            <p class="explanation muted">Explanation is not available yet.</p>
+          {% endif %}
+        {% endif %}
+      </div>
+      {% endif %}
+    </article>
+  {% endfor %}
+
+  <nav class="attempt-nav" aria-label="Page navigation">
+    <span class="page-indicator">Page {{ page_num }} / {{ total_pages }}</span>
+    {% if prev_url %}
+      <a class="btn-nav" href="{{ prev_url }}">← Previous</a>
+    {% endif %}
+    {% if next_url %}
+      <a class="btn-nav btn-primary" href="{{ next_url }}">Next →</a>
+    {% endif %}
+    <a class="btn-nav" href="/exams/{{ provider.slug }}/{{ exam.slug }}">Back to exam</a>
+  </nav>
+
+  {% endif %}
+</section>
+{% endblock %}

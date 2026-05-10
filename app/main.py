@@ -2,14 +2,16 @@
 
 Run locally with: `uvicorn app.main:app --reload`.
 """
-
+# ruff: noqa: I001  — display side-effect import MUST stay above router imports;
+# the filter-registration patches `jinja2.filters.FILTERS` and any router-side
+# `Jinja2Templates(...)` constructed before this would miss `| pretty_vendor`.
 from __future__ import annotations
 
 # Import-side-effect: registers the `pretty_vendor` Jinja filter on the
 # global Jinja2 FILTERS registry so every per-router `Jinja2Templates`
 # Environment created later inherits it. MUST stay above router imports
 # (routers create their templates at import time).
-from app.utils.display import pretty_vendor_name  # noqa: I001  (side-effect import order matters)
+from app.utils.display import pretty_vendor_name
 
 import sentry_sdk
 from fastapi import FastAPI
@@ -36,6 +38,7 @@ from app.routers.admin import questions as admin_questions
 from app.routers.admin import topics as admin_topics
 from app.routers.public import exams as public_exams
 from app.routers.public import home as public_home
+from app.routers.public import learn as public_learn
 from app.routers.public import legal as public_legal
 from app.routers.public import search as public_search
 from app.routers.public import vendors as public_vendors
@@ -105,6 +108,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(public_home.router)
     app.include_router(public_vendors.router)
     app.include_router(public_exams.router)
+    app.include_router(public_learn.router)
     app.include_router(public_search.router)
     app.include_router(public_legal.router)
     app.include_router(admin_audit.router)

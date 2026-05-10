@@ -1,0 +1,58 @@
+{% extends "practice/_layout.html" %}
+{% block title %}Mock Exam setup — {{ exam.name }}{% endblock %}
+{% block content %}
+<section class="practice-wrap" style="max-width:720px;margin:0 auto;padding:24px 16px;">
+
+  <div class="exam-header" role="banner">
+    <span>{{ exam.name }} — Mock Exam Setup</span>
+  </div>
+
+  <p class="muted" style="margin:8px 0 16px;">
+    Pick how many questions you want. Timer is <strong>1.5 minutes per question</strong>;
+    answers stay hidden until you submit.
+  </p>
+
+  <section class="card" style="padding:16px;border:1px solid #e1e2ed;border-radius:8px;background:#fff;">
+    <h2 style="margin:0 0 8px;font-size:18px;">{{ exam.name }}</h2>
+    <p class="muted" style="margin:0 0 12px;">
+      {{ provider.name | pretty_vendor }} · {{ course.name }} ·
+      <strong>{{ total_questions }}</strong> question{{ '' if total_questions == 1 else 's' }} available
+    </p>
+
+    {% if total_questions == 0 %}
+      <p class="muted">No published questions yet. Please check back later.</p>
+    {% else %}
+      <form method="post" action="/practice/{{ exam.id }}/start"
+            x-data="{ count: {{ default_count }} }">
+        <input type="hidden" name="mode" value="exam" />
+
+        <fieldset style="border:0;padding:0;margin:0 0 16px;">
+          <legend style="font-weight:600;margin-bottom:8px;">Number of questions</legend>
+          <div style="display:flex;flex-wrap:wrap;gap:8px;">
+            {% for n in presets %}
+              <button type="button"
+                      x-on:click="count = {{ n }}"
+                      x-bind:class="count === {{ n }} ? 'btn-primary' : 'btn'"
+                      class="btn">{{ n }}</button>
+            {% endfor %}
+          </div>
+        </fieldset>
+
+        <div class="field" style="margin-bottom:16px;">
+          <label class="field-label" for="question_count">Or custom (min {{ min_count or 1 }}, max {{ total_questions }})</label>
+          <input id="question_count" type="number" name="question_count"
+                 min="{{ min_count or 1 }}" max="{{ total_questions }}"
+                 x-model.number="count"
+                 required
+                 style="width:120px;padding:6px 8px;" />
+        </div>
+
+        <div class="actions">
+          <button type="submit" class="btn-primary">Start Exam →</button>
+          <a class="btn" href="/exams/{{ provider.slug }}/{{ exam.slug }}" style="margin-left:8px;">Cancel</a>
+        </div>
+      </form>
+    {% endif %}
+  </section>
+</section>
+{% endblock %}

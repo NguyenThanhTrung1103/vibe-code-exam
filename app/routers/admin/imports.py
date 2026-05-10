@@ -31,9 +31,10 @@ from app.routers.admin._common import (
     require_csrf,
     templates,
 )
+from app.schemas.catalog import ExamCreate
 from app.schemas.import_form import ImportUploadForm
 from app.security.rate_limits import RL_ADMIN_IMPORT
-from app.services import import_service
+from app.services import catalog_service, import_service
 from app.services.excel_parser import auto_map, read_headers
 
 router = APIRouter(prefix="/admin/imports", tags=["admin", "imports"])
@@ -79,6 +80,63 @@ _ALL_CANONICAL_FIELDS: tuple[str, ...] = _REQUIRED_FIELDS + _COMMUNITY_FIELDS + 
 # ---------------------------------------------------------------------------
 # Step 1 — upload
 # ---------------------------------------------------------------------------
+
+
+class _InlineExamError(ValueError):
+    """Raised when the inline +new-exam fields can't be resolved into an Exam."""
+
+
+def _create_exam_from_inline_fields(
+    session,
+    *,
+    actor,
+    request_id: str | None,
+    exam_name: str,
+    course_name: str,
+) -> int:
+    """Resolve "+ Create new exam" inline fields → Exam id.
+
+    Mirrors the flat catalog flow in `app.routers.admin.exams.create_exam`:
+    auto-creates Provider+Course by course/provider name (idempotent on slug),
+    then creates the Exam under that course. Slug derives from `exam_name`.
+    """
+    exam_name_clean = (exam_name or "").strip()
+    course_name_clean = (course_name or "").strip()
+    if not exam_name_clean or not course_name_clean:
+        raise _InlineExamError(
+            "exam name and course/provider are required when creating a new exam"
+        )
+    try:
+        course = catalog_service.get_or_create_course_by_name(
+            session,
+            actor=actor,
+            request_id=request_id,
+            course_name=course_name_clean,
+        )
+    except catalog_service.DuplicateSlugError as exc:
+        raise _InlineExamError(str(exc)) from exc
+
+    try:
+        payload = ExamCreate.model_validate(
+            {"course_id": course.id, "name": exam_name_clean, "slug": None}
+        )
+    except ValidationError as exc:
+        raise _InlineExamError(str(exc.errors()[0]["msg"])) from exc
+    assert payload.slug is not None  # set by ExamCreate validator
+
+    try:
+        exam = catalog_service.create_exam(
+            session,
+            actor=actor,
+            request_id=request_id,
+            course_id=payload.course_id,
+            name=payload.name,
+            slug=payload.slug,
+        )
+    except catalog_service.DuplicateSlugError as exc:
+        raise _InlineExamError(str(exc)) from exc
+    session.flush()
+    return exam.id
 
 
 def _imported_question_counts(session: object, import_ids: list[int]) -> dict[int, int]:
@@ -238,16 +296,39 @@ async def upload(
     request: Request,
     user: RequireAdmin,
     session: SessionDep,
-    target_exam_id: int = Form(...),
+    target_exam_id: str = Form(...),
     attestation: str = Form(...),
     csrf_token: str = Form(""),
     title: str = Form(""),
+    new_exam_name: str = Form(""),
+    new_course_name: str = Form(""),
     file: UploadFile = File(...),  # noqa: B008 — FastAPI marker
 ) -> Response:
     require_csrf(request, csrf_token)
+    request_id = request.headers.get(REQUEST_ID_HEADER)
+    # Resolve target exam: existing dropdown id OR sentinel "__new__" with
+    # inline exam-name + course-name fields → auto-create provider+course+exam.
+    if target_exam_id == "__new__":
+        try:
+            resolved_exam_id = _create_exam_from_inline_fields(
+                session,
+                actor=user,
+                request_id=request_id,
+                exam_name=new_exam_name,
+                course_name=new_course_name,
+            )
+        except _InlineExamError as exc:
+            return _render_upload_with_error(request, user, session, str(exc))
+    else:
+        try:
+            resolved_exam_id = int(target_exam_id)
+        except ValueError:
+            return _render_upload_with_error(
+                request, user, session, "invalid target_exam_id"
+            )
     try:
         ImportUploadForm.model_validate(
-            {"target_exam_id": target_exam_id, "attestation": attestation}
+            {"target_exam_id": resolved_exam_id, "attestation": attestation}
         )
     except ValidationError as exc:
         return _render_upload_with_error(request, user, session, str(exc.errors()[0]["msg"]))
@@ -258,8 +339,8 @@ async def upload(
         imp = import_service.create_import(
             session,
             actor=user,
-            request_id=request.headers.get(REQUEST_ID_HEADER),
-            target_exam_id=target_exam_id,
+            request_id=request_id,
+            target_exam_id=resolved_exam_id,
             file_name=file.filename,
             file_bytes=file_bytes,
             attestation=attestation,
@@ -280,7 +361,7 @@ async def upload(
         counts = import_service.parse_and_stage(
             session,
             actor=user,
-            request_id=request.headers.get(REQUEST_ID_HEADER),
+            request_id=request_id,
             import_id=imp.id,
         )
     except (import_service.UploadValidationError, import_service.ImportStateError) as exc:

@@ -57,6 +57,12 @@ if TYPE_CHECKING:  # pragma: no cover
 
 _OPTION_LABELS_VALID = ("A", "B", "C", "D", "E", "F", "G", "H")
 
+# Mock Exam time budget: 1.5 minutes per question, computed from
+# `attempt.total_questions` so a 30-question Mock Exam runs 45 minutes
+# regardless of what `exams.time_limit_seconds` says. Keeps the timer
+# fair when the learner picks a smaller subset on the setup page.
+_MOCK_SECONDS_PER_QUESTION = 90
+
 
 # ---------------------------------------------------------------------------
 # Errors
@@ -704,16 +710,26 @@ def _count(col):
 
 
 def _time_remaining_seconds(session: Session, attempt: Attempt) -> int | None:
-    """Remaining seconds for exam mode; None for practice or unset limit."""
+    """Remaining seconds for exam mode; None for practice.
+
+    Mock Exam budget = `_MOCK_SECONDS_PER_QUESTION × attempt.total_questions`
+    (1.5 min × N). Falls back to `exam.time_limit_seconds` only if total_questions
+    is missing, so legacy attempts without a frozen count still get a timer.
+    """
     if attempt.mode != AttemptMode.exam:
         return None
-    exam = session.get(Exam, attempt.exam_id)
-    if exam is None or not exam.time_limit_seconds:
-        return None
+    n = attempt.total_questions or 0
+    if n > 0:
+        budget = n * _MOCK_SECONDS_PER_QUESTION
+    else:
+        exam = session.get(Exam, attempt.exam_id)
+        if exam is None or not exam.time_limit_seconds:
+            return None
+        budget = exam.time_limit_seconds
     if attempt.started_at is None:
-        return exam.time_limit_seconds
+        return budget
     elapsed = (datetime.now(UTC) - attempt.started_at).total_seconds()
-    remaining = int(exam.time_limit_seconds - elapsed)
+    remaining = int(budget - elapsed)
     return max(0, remaining)
 
 

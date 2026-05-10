@@ -20,28 +20,13 @@
       </div>
       {% if ex.question_count > 0 %}
       <div class="start-actions">
+        <a class="btn-start btn-learn" href="/learn/{{ ex.slug }}">Learn (study with answers) →</a>
         <form method="post" action="/practice/{{ ex.id }}/start" class="start-form">
           <p class="start-form-helper">Practice with instant feedback</p>
           <input type="hidden" name="mode" value="practice" />
           <button type="submit" class="btn-start">Learning Mode →</button>
         </form>
-        {% set default_mock = 30 if ex.question_count >= 30 else ex.question_count %}
-        <form method="post" action="/practice/{{ ex.id }}/start" class="start-form mock-form">
-          <p class="start-form-helper">Random questions, results at the end</p>
-          <input type="hidden" name="mode" value="exam" />
-          <div class="mock-controls">
-            <label class="mock-count-label" for="qc-{{ ex.id }}">
-              <span class="mock-count-text">Q</span>
-              <input id="qc-{{ ex.id }}" type="number" name="question_count"
-                     min="1" max="{{ ex.question_count }}"
-                     value="{{ default_mock }}"
-                     inputmode="numeric"
-                     aria-label="Number of questions for this Mock Exam (max {{ ex.question_count }})"
-                     required />
-            </label>
-            <button type="submit" class="btn-start btn-start-mock">Mock Exam →</button>
-          </div>
-        </form>
+        <a class="btn-start btn-start-mock" href="/practice/{{ ex.slug }}/setup">Mock Exam (configure) →</a>
       </div>
       {% else %}
       <span class="muted">Coming soon</span>

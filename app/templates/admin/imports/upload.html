@@ -21,17 +21,36 @@
       <span class="card-meta">XLSX · saved HTML · PDF · TXT · max 25 MB</span>
     </header>
 
-    <form method="post" enctype="multipart/form-data" action="/admin/imports">
+    <form method="post" enctype="multipart/form-data" action="/admin/imports"
+          x-data="{ mode: '{{ exams[0][0].id if exams else '__new__' }}' }">
       <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
 
       <div class="field">
         <label class="field-label" for="target-exam">Target exam<span class="required-mark">*</span></label>
-        <select id="target-exam" name="target_exam_id" required>
+        <select id="target-exam" name="target_exam_id" required x-model="mode">
           {% for exam, course, provider in exams %}
             <option value="{{ exam.id }}">{{ provider.name }} · {{ course.name }} · {{ exam.name }} (id={{ exam.id }})</option>
           {% endfor %}
+          <option value="__new__">+ Create new exam…</option>
         </select>
         <p class="field-help">Imported questions land in this exam as <strong>draft</strong> in the bank until you publish the exam for learners.</p>
+      </div>
+
+      {# Inline new-exam creation — auto-creates provider+course+exam if needed. #}
+      <div class="field" x-show="mode === '__new__'" x-cloak>
+        <label class="field-label" for="new-exam-name">Exam name<span class="required-mark">*</span></label>
+        <input id="new-exam-name" type="text" name="new_exam_name" maxlength="255"
+               placeholder="e.g. AWS SAA-C03"
+               x-bind:required="mode === '__new__'" />
+        <p class="field-help">The exam learners will see (e.g. <em>AWS SAA-C03</em>).</p>
+      </div>
+
+      <div class="field" x-show="mode === '__new__'" x-cloak>
+        <label class="field-label" for="new-course-name">Course / Provider<span class="required-mark">*</span></label>
+        <input id="new-course-name" type="text" name="new_course_name" maxlength="255"
+               placeholder="e.g. Amazon AWS"
+               x-bind:required="mode === '__new__'" />
+        <p class="field-help">Used as both course and provider name. Reuses existing provider/course if the slug matches; otherwise creates them.</p>
       </div>
 
       <div class="field">

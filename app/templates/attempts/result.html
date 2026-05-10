@@ -8,16 +8,18 @@
     <strong>{{ "%.2f"|format(attempt.score_percent or 0) }}%</strong>
     {% if attempt.passed is true %}<span class="badge badge-pass">PASS</span>
     {% elif attempt.passed is false %}<span class="badge badge-fail">FAIL</span>
-    {% else %}<span class="badge">no passing score set</span>{% endif %}
+    {% else %}<span class="badge">no score</span>{% endif %}
   </p>
   <dl>
     <dt>Total questions</dt><dd>{{ attempt.total_questions or 0 }}</dd>
-    <dt>Correct</dt><dd>{{ attempt.correct_count or 0 }}</dd>
+    <dt>Correct</dt><dd>{{ attempt.correct_count or 0 }} / {{ attempt.total_questions or 0 }}</dd>
     <dt>Wrong</dt><dd>{{ attempt.wrong_count or 0 }}</dd>
-    {% if attempt.duration_seconds %}<dt>Duration</dt><dd>{{ attempt.duration_seconds }} s</dd>{% endif %}
-    {% if exam and exam.passing_score_percent is not none %}
-      <dt>Passing score</dt><dd>{{ exam.passing_score_percent }}%</dd>
+    {% if attempt.duration_seconds %}
+      <dt>Time taken</dt>
+      <dd>{{ (attempt.duration_seconds // 60) }}m {{ (attempt.duration_seconds % 60) }}s</dd>
     {% endif %}
+    <dt>Pass threshold</dt>
+    <dd>{{ "%.0f"|format(pass_threshold) }}%{% if exam and exam.passing_score_percent is none %} <span class="muted">(default)</span>{% endif %}</dd>
   </dl>
 </section>
 
@@ -56,8 +58,36 @@
 </section>
 {% endif %}
 
+{% if review_rows %}
+<section class="per-question-review">
+  <h2>Per-question review</h2>
+  <table class="catalog-table">
+    <thead>
+      <tr>
+        <th>#</th>
+        <th>Question</th>
+        <th>Your answer</th>
+        <th>Correct</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for r in review_rows %}
+        <tr>
+          <td>{{ r.order }}</td>
+          <td>{{ r.question_text }}</td>
+          <td><code>{{ r.user_answer }}</code></td>
+          <td><code>{{ r.correct_answer }}</code></td>
+          <td>{% if r.is_correct %}✅{% else %}❌{% endif %}</td>
+        </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endif %}
+
 <nav class="result-nav">
-  <a class="btn" href="/attempts/{{ attempt.id }}/review">Review all</a>
+  <a class="btn btn-primary" href="/attempts/{{ attempt.id }}/review">Review full answers</a>
   <a class="btn" href="/attempts/{{ attempt.id }}/review?wrong_only=1">Review wrong only</a>
   <a class="btn" href="/">Home</a>
 </nav>

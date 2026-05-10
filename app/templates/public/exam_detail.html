@@ -77,6 +77,13 @@
       </div>
     {% else %}
       {% set mock_default = 30 if published_question_count >= 30 else published_question_count %}
+      <div class="mb-md">
+        <a href="/learn/{{ exam.slug }}"
+           class="inline-flex items-center gap-xs bg-secondary-container text-on-secondary-container hover:bg-secondary-fixed-dim px-md py-sm rounded-lg font-label-md transition-all">
+          <span class="material-symbols-outlined text-[18px]">menu_book</span>
+          Open Learn Mode (study with answers shown)
+        </a>
+      </div>
       <div class="grid grid-cols-1 md:grid-cols-2 gap-md items-stretch">
         <form method="post" action="/practice/{{ exam.id }}/start"
               class="bg-surface-container-lowest p-lg rounded-xl border border-outline-variant flex flex-col h-full">
@@ -96,32 +103,20 @@
           </button>
         </form>
 
-        <form method="post" action="/practice/{{ exam.id }}/start"
-              class="bg-surface-container-lowest p-lg rounded-xl border border-outline-variant flex flex-col h-full">
+        <div class="bg-surface-container-lowest p-lg rounded-xl border border-outline-variant flex flex-col h-full">
           <div class="flex items-center gap-sm mb-xs">
             <span class="material-symbols-outlined text-tertiary">timer</span>
             <h3 class="font-h3 text-h3 text-on-surface">Mock Exam</h3>
           </div>
           <p class="font-body-md text-on-surface-variant mb-md">
-            {{ mock_default }} random questions, results revealed only at the end. Answers and explanations stay hidden until you submit.
+            Pick how many questions you want (10 / 20 / 30 / 50 or custom). Timer = 1.5 min × question count. Answers stay hidden until you submit.
           </p>
-          <input type="hidden" name="mode" value="exam" />
-          <div class="mt-auto flex flex-col sm:flex-row gap-sm sm:items-stretch">
-            <label class="flex items-stretch rounded-lg border border-outline-variant overflow-hidden bg-surface-container-lowest"
-                   for="question_count_{{ exam.id }}">
-              <span class="px-md flex items-center bg-surface-container-low text-on-surface-variant text-caption font-label-md uppercase tracking-wide">Q</span>
-              <input id="question_count_{{ exam.id }}" type="number" name="question_count"
-                     min="1" max="{{ published_question_count }}" value="{{ mock_default }}"
-                     aria-label="Number of questions (max {{ published_question_count }})"
-                     class="w-20 h-12 text-center font-body-md text-on-surface bg-transparent border-0 focus:ring-0 focus:outline-none" />
-            </label>
-            <button type="submit"
-                    class="flex-1 h-12 inline-flex items-center justify-center gap-xs bg-tertiary hover:bg-tertiary-container text-on-tertiary font-label-md px-lg rounded-lg transition-all active:scale-[0.98] shadow-md">
-              <span class="material-symbols-outlined text-[18px]">timer</span>
-              Start Mock Exam
-            </button>
-          </div>
-        </form>
+          <a href="/practice/{{ exam.slug }}/setup"
+             class="mt-auto h-12 inline-flex items-center justify-center gap-xs bg-tertiary hover:bg-tertiary-container text-on-tertiary font-label-md px-lg rounded-lg transition-all active:scale-[0.98] shadow-md">
+            <span class="material-symbols-outlined text-[18px]">timer</span>
+            Configure Mock Exam
+          </a>
+        </div>
       </div>
       <p class="text-caption text-on-surface-variant mt-md">No login required. Mock Exam picks {{ mock_default }} random questions; Learning Mode walks the full bank.</p>
     {% endif %}

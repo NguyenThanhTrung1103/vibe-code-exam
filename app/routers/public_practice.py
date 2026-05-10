@@ -1,11 +1,12 @@
 """Phase 18 — public guest-practice routes.
 
-Two endpoints:
+Endpoints:
 
-* `GET  /practice`                   — public catalog of published exams.
-* `POST /practice/{exam_id}/start`   — issue (or reuse) a signed guest
-                                       cookie + start an attempt; redirect
-                                       to `/attempts/{id}/page/1`.
+* `GET  /practice`                       — public catalog of published exams.
+* `GET  /practice/{exam_slug}/setup`     — Mock Exam setup page (pick #questions).
+* `POST /practice/{exam_id}/start`       — issue (or reuse) a signed guest
+                                           cookie + start an attempt; redirect
+                                           to `/attempts/{id}/page/1`.
 
 No authentication required. Draft exams must never appear in the catalog
 or accept starts. CSRF is intentionally NOT enforced on `/start` because
@@ -44,6 +45,10 @@ from app.services import attempt_service
 # Mock Exam default subset size — overridable per-request via the form's
 # `question_count` field; capped server-side at the exam's published total.
 _MOCK_DEFAULT_COUNT = 30
+# Mock Exam setup minimum question count.
+_MOCK_MIN_COUNT = 5
+# Preset buttons for the setup page (kept here so the template stays dumb).
+_MOCK_PRESETS = (10, 20, 30, 50)
 
 router = APIRouter(prefix="/practice", tags=["public", "practice"])
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
@@ -104,6 +109,63 @@ def catalog(request: Request, session: SessionDep) -> HTMLResponse:
         request,
         "practice/catalog.html",
         {"exams": exams_view},
+    )
+
+
+# ---------------------------------------------------------------------------
+# GET /practice/{exam_slug}/setup — Mock Exam configuration page
+# ---------------------------------------------------------------------------
+
+
+@router.get("/{exam_slug}/setup", response_class=HTMLResponse)
+def setup_page(
+    exam_slug: str,
+    request: Request,
+    session: SessionDep,
+) -> HTMLResponse:
+    """Render the Mock Exam setup page: question-count picker → POST /start.
+
+    Looks up the exam by slug (slugs are unique per course; if a collision
+    exists we pick the most-recently updated published one). 404 for
+    draft / soft-deleted / unknown slugs.
+    """
+    row = session.execute(
+        select(Exam, Course, Provider)
+        .join(Course, Exam.course_id == Course.id)
+        .join(Provider, Course.provider_id == Provider.id)
+        .where(Exam.slug == exam_slug)
+        .where(published_exam_filter())
+        .order_by(Exam.updated_at.desc())
+    ).first()
+    if row is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="exam not found")
+    exam, course, provider = row
+
+    total = (
+        session.scalar(
+            select(func.count(Question.id))
+            .where(Question.exam_id == exam.id)
+            .where(Question.deleted_at.is_(None))
+            .where(Question.retired_at.is_(None))
+            .where(Question.status == QuestionStatus.published)
+        )
+        or 0
+    )
+    total = int(total)
+    presets = [n for n in _MOCK_PRESETS if n <= total] or ([total] if total else [])
+    default_count = _MOCK_DEFAULT_COUNT if total >= _MOCK_DEFAULT_COUNT else total
+    return templates.TemplateResponse(
+        request,
+        "practice/setup.html",
+        {
+            "exam": exam,
+            "course": course,
+            "provider": provider,
+            "total_questions": total,
+            "presets": presets,
+            "default_count": default_count,
+            "min_count": min(_MOCK_MIN_COUNT, total) if total else 0,
+        },
     )
 
 
