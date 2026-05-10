@@ -140,10 +140,13 @@ def _create_exam_from_inline_fields(
 
 
 def _imported_question_counts(session: object, import_ids: list[int]) -> dict[int, int]:
-    """Return live count of non-deleted questions per source_import_id.
+    """Return live count of non-deleted, non-retired questions per source_import_id.
 
     Drives the 'Review questions' / 'No imported questions' affordance in the
-    Recent imports table. Empty input → empty dict (one fewer round-trip).
+    Recent imports table. Retired questions are excluded so the counter
+    matches the pool that's actually eligible for new attempts (mirrors
+    `publishable_question_filter`). Empty input → empty dict (one fewer
+    round-trip).
     """
     if not import_ids:
         return {}
@@ -151,6 +154,7 @@ def _imported_question_counts(session: object, import_ids: list[int]) -> dict[in
         select(Question.source_import_id, func.count(Question.id))
         .where(Question.source_import_id.in_(import_ids))
         .where(Question.deleted_at.is_(None))
+        .where(Question.retired_at.is_(None))
         .group_by(Question.source_import_id)
     ).all()
     return {sid: cnt for sid, cnt in rows if sid is not None}
